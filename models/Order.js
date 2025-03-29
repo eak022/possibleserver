@@ -11,6 +11,7 @@ const OrderSchema = new Schema({
       quantity: { type: Number, required: true, default: 1 },
       purchasePrice: { type: Number, required: true },
       sellingPricePerUnit: {  type: Number, required: true  },
+      pack: { type: Boolean, required: true },
       
     },
   ],

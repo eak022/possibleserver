@@ -162,3 +162,29 @@ exports.deleteProductById = async (req, res) => {
   }
 };
 
+// 📌 READ: ดึงสินค้าโดย barcodePack หรือ barcodeUnit
+exports.getProductByBarcode = async (req, res) => {
+  const { barcode } = req.params; // รับค่า barcode จาก URL
+
+  try {
+    // ค้นหาสินค้าโดย barcode (สามารถใช้ barcodePack หรือ barcodeUnit ได้)
+    const product = await ProductModel.findOne({
+      $or: [{ barcodePack: barcode }, { barcodeUnit: barcode }] // ค้นหาตาม barcodePack หรือ barcodeUnit
+    })
+      .populate("categoryId", "categoryName")
+      .populate("productStatus", "statusName");
+
+    if (!product) {
+      return res.status(404).send({
+        message: "Product not found.",
+      });
+    }
+
+    res.json(product);
+  } catch (error) {
+    console.log(error.message);
+    res.status(500).send({
+      message: "Error occurred while fetching product by barcode.",
+    });
+  }
+};

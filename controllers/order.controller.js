@@ -36,6 +36,7 @@ exports.createOrder = async (req, res) => {
         quantity: item.quantity,
         purchasePrice: item.price,
         sellingPricePerUnit: item.price,
+        pack:item.pack,
       });
 
       // ตัดสต็อกสินค้า
@@ -190,3 +191,4 @@ exports.updateOrderDetail = async (req, res) => {
     res.status(500).json({ message: "Error updating order", error });
   }
 };
+
