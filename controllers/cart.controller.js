@@ -30,6 +30,9 @@ exports.createCart = async (req, res) => {
       return res.status(404).json({ message: "Product not found!" });
     }
 
+    // กำหนดราคาตามว่า pack เป็น true หรือไม่
+    const price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+
     // ค้นหาสินค้าในตะกร้าของผู้ใช้
     const existingItem = await CartModel.findOne({ productId, userName });
 
@@ -44,7 +47,7 @@ exports.createCart = async (req, res) => {
     const cart = new CartModel({
       productId,
       name: product.productName,  // ใช้ชื่อสินค้า
-      price: product.sellingPricePerUnit,  // ใช้ราคาต่อหน่วย
+      price,                      // ใช้ราคาที่คำนวณจาก pack
       image: product.productImage,  // ใช้รูปภาพสินค้า
       quantity,
       userName,
@@ -58,6 +61,7 @@ exports.createCart = async (req, res) => {
     res.status(500).json({ message: error.message || "Something went wrong!" });
   }
 };
+
 
   
   exports.getCartsByUserName = async (req, res) => {
@@ -88,39 +92,56 @@ exports.deleteAllCarts = async (req, res) => {
     }
   };
   
-  // 📌 PUT /cart/{id} - อัปเดตสินค้าตาม ID
-exports.updateCartById = async (req, res) => {
-    let { quantity } = req.body;
+  exports.updateCartById = async (req, res) => {
+    const { quantity, pack } = req.body;
   
     console.log("Received quantity:", quantity);
-    console.log("Type of quantity:", typeof quantity);
-  
-    if (quantity === undefined || quantity === null) {
-      return res.status(400).json({ message: "Quantity is required!" });
-    }
-  
-    quantity = Number(quantity); // แปลงเป็น Number
-  
-    if (isNaN(quantity) || quantity < 1) {
-      return res.status(400).json({ message: "Invalid quantity!" });
-    }
+    console.log("Received pack:", pack);
   
     try {
-      const updatedItem = await CartModel.findByIdAndUpdate(
-        req.params.id,
-        { quantity },
-        { new: true }
-      );
+      // ค้นหาสินค้าในตะกร้า
+      const cartItem = await CartModel.findById(req.params.id);
   
-      if (!updatedItem) {
+      if (!cartItem) {
         return res.status(404).json({ message: "Item not found!" });
       }
+  
+      // ค้นหาสินค้าจาก productId เพื่อดึงราคามาใช้
+      const product = await ProductModel.findById(cartItem.productId);
+  
+      if (!product) {
+        return res.status(404).json({ message: "Product not found!" });
+      }
+  
+      // กำหนดราคาตามว่า pack เป็น true หรือไม่
+      let price = cartItem.price; // เก็บราคาปัจจุบันไว้ก่อน
+      if (pack !== undefined) {
+        price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+      }
+  
+      // อัปเดตเฉพาะถ้ามีการเปลี่ยนแปลง
+      if (quantity !== undefined && quantity !== null) {
+        // ถ้า quantity ถูกส่งมา อัปเดต quantity
+        cartItem.quantity = Number(quantity);
+      }
+  
+      if (pack !== undefined) {
+        // ถ้า pack ถูกส่งมา อัปเดตราคา
+        cartItem.pack = pack;
+      }
+  
+      // อัปเดตราคาใหม่ถ้าจำเป็น
+      cartItem.price = price;
+  
+      // บันทึกการอัปเดต
+      const updatedItem = await cartItem.save();
   
       res.json(updatedItem);
     } catch (error) {
       res.status(500).json({ message: error.message || "Failed to update cart item." });
     }
   };
+  
   
   // 📌 DELETE /cart/{id} - ลบสินค้าตาม ID
 exports.deleteCartById = async (req, res) => {
@@ -153,6 +174,8 @@ exports.deleteCartById = async (req, res) => {
       if (!product) {
         return res.status(404).json({ message: "Product not found!" });
       }
+
+      const price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
   
       // ค้นหาสินค้าในตะกร้าของผู้ใช้
       const existingItem = await CartModel.findOne({ productId: product._id, userName });
@@ -168,7 +191,7 @@ exports.deleteCartById = async (req, res) => {
       const cart = new CartModel({
         productId: product._id,
         name: product.productName,  // ใช้ชื่อสินค้า
-        price: product.sellingPricePerUnit,  // ใช้ราคาของสินค้า
+        price,
         image: product.productImage,  // ใช้รูปภาพสินค้า
         quantity,
         userName,

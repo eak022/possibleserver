@@ -1,12 +1,16 @@
 const express = require("express");
 const router = express.Router();
-const {createPurchaseOrder, getAllPurchaseOrders , getPurchaseOrderById, updatePurchaseOrder, deletePurchaseOrder, updateStockFromPurchaseOrder } = require("../controllers/purchaseOrder.controller");
+const {receiveStock, createPurchaseOrder, getAllPurchaseOrders, updatePurchaseOrder, deletePurchaseOrder} = require("../controllers/purchaseOrder.controller");
 
-router.post("/createPurchaseOrder",createPurchaseOrder);
-router.get("/getAllPurchaseOrders",getAllPurchaseOrders);
-router.get("/getPurchaseOrderById",getPurchaseOrderById);
-router.put("/updatePurchaseOrder",updatePurchaseOrder);
-router.delete("/deletePurchaseOrder",deletePurchaseOrder);
-router.put("/updateStockFromPurchaseOrder",updateStockFromPurchaseOrder);
+router.post("/",createPurchaseOrder);
+router.post("/:id/receive",receiveStock);
+router.get("/",getAllPurchaseOrders);
+router.put("/:id",updatePurchaseOrder);
+router.delete("/:id",deletePurchaseOrder);
+
 
 module.exports = router;
+
+
+
+

@@ -26,5 +26,16 @@
     "stripe": "^17.7.0",
     "swagger-autogen": "^2.23.7",
     "swagger-ui-express": "^5.0.1"
-  }
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eak022/possibleserver.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/eak022/possibleserver/issues"
+  },
+  "homepage": "https://github.com/eak022/possibleserver#readme"
 }

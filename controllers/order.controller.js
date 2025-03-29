@@ -18,7 +18,15 @@ exports.createOrder = async (req, res) => {
       if (!product) {
         return res.status(404).json({ message: `Product ${item.productName} not found` });
       }
-      if (product.quantity < item.quantity) {
+
+      let requiredQuantity = item.quantity;
+      // ถ้า pack เป็น true คูณจำนวนด้วย packSize ก่อน
+      if (item.pack) {
+        requiredQuantity *= product.packSize;
+      }
+
+      // ตรวจสอบจำนวนสินค้าคงเหลือในสต็อก
+      if (product.quantity < requiredQuantity) {
         return res.status(400).json({ message: `Not enough stock for ${item.productName}` });
       }
     }
@@ -39,9 +47,20 @@ exports.createOrder = async (req, res) => {
         pack:item.pack,
       });
 
+      const product = await ProductModel.findById(item.productId);
+      if (!product) {
+        return res.status(404).json({ message: `Product ${item.productName} not found` });
+      }
+
+      let requiredQuantity = item.quantity;
+      // ถ้า pack เป็น true คูณจำนวนด้วย packSize ก่อน
+      if (item.pack ) {
+        requiredQuantity *= product.packSize;
+      }
+
       // ตัดสต็อกสินค้า
       await ProductModel.findByIdAndUpdate(item.productId, {
-        $inc: { quantity: -item.quantity },
+        $inc: { quantity: -requiredQuantity },
       });
     }
 
@@ -124,71 +143,63 @@ exports.deleteOrder = async (req, res) => {
 };
 exports.updateOrderDetail = async (req, res) => {
   try {
-    const { products } = req.body;
-
-    // ตรวจสอบว่า products เป็น array
-    if (!Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({ message: "Products data is required and must be an array." });
-    }
+    const { productId, quantity, sellingPricePerUnit, pack } = req.body;
 
     const order = await OrderModel.findById(req.params.id);
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // คืนสต็อกสินค้าจากออเดอร์เก่า
-    for (const oldItem of order.products) {
-      await ProductModel.findByIdAndUpdate(oldItem.productId, {
-        $inc: { quantity: oldItem.quantity }
-      });
-    }
-
-    let subtotal = 0;
-    const updatedProducts = [];
-
-    // ตรวจสอบสินค้าใหม่และอัปเดตสต็อก
-    for (const newItem of products) {
-      const product = await ProductModel.findById(newItem.productId);
+    if (productId) {
+      const product = await ProductModel.findById(productId);
       if (!product) {
-        return res.status(404).json({ message: `Product ${newItem.productName} not found` });
+        return res.status(404).json({ message: `Product not found` });
       }
 
-      // ตรวจสอบสินค้าที่มีในออเดอร์เก่า
-      const oldItem = order.products.find(p => p.productId.toString() === newItem.productId.toString());
-      let quantityDiff = 0;
-      if (oldItem) {
-        // คำนวณความแตกต่างของจำนวนสินค้า
-        quantityDiff = newItem.quantity - oldItem.quantity;
-      } else {
-        quantityDiff = newItem.quantity;
+      const oldItem = order.products.find(p => p.productId.toString() === productId.toString());
+      if (!oldItem) {
+        return res.status(404).json({ message: `Product not found in this order` });
       }
 
-      // เช็กว่าเพียงพอไหมกับจำนวนที่ต้องการ
-      if (product.quantity < quantityDiff) {
-        return res.status(400).json({ message: `Not enough stock for ${newItem.productName}` });
+      // 🔴 ห้ามเปลี่ยน pack (ใช้ค่าเดิมเสมอ)
+      const previousPack = oldItem.pack;
+
+      let newQuantity = quantity !== undefined ? quantity : oldItem.quantity;
+
+      let oldTotalQuantity = previousPack ? oldItem.quantity * product.packSize : oldItem.quantity;
+      let newTotalQuantity = previousPack ? newQuantity * product.packSize : newQuantity;
+      let quantityDiff = newTotalQuantity - oldTotalQuantity;
+
+      // ถ้าสต็อกไม่พอ
+      if (quantityDiff > 0 && product.quantity < quantityDiff) {
+        return res.status(400).json({ message: `Not enough stock for ${product.productName}` });
       }
 
-      // ปรับจำนวนสต็อกให้ถูกต้อง
-      await ProductModel.findByIdAndUpdate(newItem.productId, {
-        $inc: { quantity: -quantityDiff } // ลดจำนวนสินค้าตามจำนวนที่ต้องการ
+      // ปรับสต็อกสินค้า
+      await ProductModel.findByIdAndUpdate(productId, {
+        $inc: { quantity: -quantityDiff }
       });
 
-      subtotal += newItem.sellingPricePerUnit * newItem.quantity;
-      updatedProducts.push(newItem);
+      // อัปเดตข้อมูลสินค้า (แต่ห้ามแก้ pack)
+      oldItem.quantity = newQuantity;
+      oldItem.sellingPricePerUnit = sellingPricePerUnit || oldItem.sellingPricePerUnit;
+
+      let subtotal = 0;
+      order.products.forEach(item => {
+        subtotal += item.sellingPricePerUnit * item.quantity;
+      });
+
+      order.subtotal = subtotal;
+      order.total = subtotal;
+
+      await order.save();
+
+      return res.status(200).json({ message: "Order updated and stock adjusted", order });
     }
 
-    const total = subtotal;
-
-    // อัปเดตคำสั่งซื้อ
-    order.products = updatedProducts;
-    order.subtotal = subtotal;
-    order.total = total;
-    await order.save();
-
-    res.status(200).json({ message: "Order updated and stock adjusted", order });
+    res.status(400).json({ message: "No valid update parameters provided" });
   } catch (error) {
     console.error("Error updating order:", error);
     res.status(500).json({ message: "Error updating order", error });
   }
 };
-
