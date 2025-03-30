@@ -1,50 +1,37 @@
 const ProductModel = require("../models/Product");
+const cloudinary = require("../utils/cloudinary"); 
 
 // 📌 CREATE: สร้างสินค้าใหม่
 exports.createProduct = async (req, res) => {
-  const {
-    productName,
-    productDescription,
-    productImage,
-    categoryId,
-    packSize,
-    productStatus,
-    barcodePack,
-    barcodeUnit,
-    quantity,
-    purchasePrice,
-    sellingPricePerUnit,
-    sellingPricePerPack,
-    expirationDate
-  } = req.body;
-
   try {
-    const newProduct = new ProductModel({
-      productName,
-      productDescription,
-      productImage,
-      categoryId,
-      packSize,
-      productStatus,
-      barcodePack,
-      barcodeUnit,
-      quantity,
-      purchasePrice,
-      sellingPricePerUnit,
-      sellingPricePerPack,
-      expirationDate
-    });
+      const { productName, productDescription, categoryId, packSize, productStatus, barcodePack, barcodeUnit, quantity, purchasePrice, sellingPricePerUnit, sellingPricePerPack, expirationDate } = req.body;
 
-    const savedProduct = await newProduct.save();
-    res.status(201).json(savedProduct);
+      if (!req.file) {
+          return res.status(400).json({ message: "Please upload a product image" });
+      }
+
+      const newProduct = new ProductModel({
+          productName,
+          productDescription,
+          productImage: req.file.path,  // ใช้ URL จาก Cloudinary
+          categoryId,
+          packSize,
+          productStatus,
+          barcodePack,
+          barcodeUnit,
+          quantity,
+          purchasePrice,
+          sellingPricePerUnit,
+          sellingPricePerPack,
+          expirationDate
+      });
+
+      await newProduct.save();
+      return res.status(201).json({ message: "Product created successfully", product: newProduct });
   } catch (error) {
-    console.log(error.message);
-    res.status(500).send({
-      message: "Error occurred while creating product.",
-    });
+      return res.status(500).json({ message: error.message });
   }
 };
-
 // 📌 READ: ดึงสินค้าทั้งหมด
 exports.getAllProducts = async (req, res) => {
   try {
@@ -83,13 +70,11 @@ exports.getProductById = async (req, res) => {
   }
 };
 
-// 📌 UPDATE: อัปเดตข้อมูลสินค้าตาม ID
 exports.updateProductById = async (req, res) => {
   const { id } = req.params;
   const {
     productName,
     productDescription,
-    productImage,
     categoryId,
     packSize,
     productStatus,
@@ -103,12 +88,29 @@ exports.updateProductById = async (req, res) => {
   } = req.body;
 
   try {
+    let product = await ProductModel.findById(id);
+    if (!product) {
+      return res.status(404).send({ message: "Product not found." });
+    }
+
+    let imageUrl = product.productImage; // ค่าดั้งเดิมของรูปภาพ
+
+    // 📌 เช็คว่ามีไฟล์ใหม่ถูกอัปโหลดหรือไม่
+    if (req.file) {
+      // ✅ อัปโหลดรูปไปที่ Cloudinary
+      const uploadResponse = await cloudinary.uploader.upload(req.file.path, {
+        folder: "products",
+      });
+      imageUrl = uploadResponse.secure_url; // URL ของรูปที่อัปโหลดใหม่
+    }
+
+    // 📌 อัปเดตข้อมูลสินค้า
     const updatedProduct = await ProductModel.findByIdAndUpdate(
       id,
       {
         productName,
         productDescription,
-        productImage,
+        productImage: imageUrl, // ✅ ใช้ URL ของ Cloudinary
         categoryId,
         packSize,
         productStatus,
@@ -120,47 +122,41 @@ exports.updateProductById = async (req, res) => {
         sellingPricePerPack,
         expirationDate
       },
-      { new: true } // ส่งค่าผลลัพธ์เป็นข้อมูลที่อัปเดตแล้ว
+      { new: true }
     );
-
-    if (!updatedProduct) {
-      return res.status(404).send({
-        message: "Product not found.",
-      });
-    }
 
     res.json(updatedProduct);
   } catch (error) {
     console.log(error.message);
-    res.status(500).send({
-      message: "Error occurred while updating product.",
-    });
+    res.status(500).send({ message: "Error occurred while updating product." });
   }
 };
 
-// 📌 DELETE: ลบสินค้าตาม ID
 exports.deleteProductById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const deletedProduct = await ProductModel.findByIdAndDelete(id);
-
-    if (!deletedProduct) {
-      return res.status(404).send({
-        message: "Product not found.",
-      });
+    const product = await ProductModel.findById(id);
+    if (!product) {
+      return res.status(404).send({ message: "Product not found." });
     }
 
-    res.status(200).json({
-      message: "Product deleted successfully.",
-    });
+    // 📌 ดึง `public_id` ของรูปจาก URL Cloudinary เพื่อลบรูป
+    const imageUrl = product.productImage;
+    if (imageUrl) {
+      const publicId = imageUrl.split("/").pop().split(".")[0]; // ดึง public_id ของ Cloudinary
+      await cloudinary.uploader.destroy(`products/${publicId}`); // ลบจาก Cloudinary
+    }
+
+    // 📌 ลบสินค้าออกจากฐานข้อมูล
+    await ProductModel.findByIdAndDelete(id);
+    res.status(200).json({ message: "Product deleted successfully." });
   } catch (error) {
     console.log(error.message);
-    res.status(500).send({
-      message: "Error occurred while deleting product.",
-    });
+    res.status(500).send({ message: "Error occurred while deleting product." });
   }
 };
+
 
 // 📌 READ: ดึงสินค้าโดย barcodePack หรือ barcodeUnit
 exports.getProductByBarcode = async (req, res) => {
