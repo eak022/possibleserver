@@ -186,3 +186,22 @@ exports.deletePurchaseOrder = async (req, res) => {
   }
 };
 
+exports.getPurchaseOrderById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const purchaseOrder = await PurchaseOrderModel.findById(id)
+      .populate("userId", "name email")
+      .populate("supplierId", "name contact")
+      .populate("products.productId", "name category")
+      .lean();
+
+    if (!purchaseOrder) {
+      return res.status(404).json({ message: "Purchase Order not found" });
+    }
+
+    res.status(200).json(purchaseOrder);
+  } catch (error) {
+    console.error("Error fetching purchase order:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
