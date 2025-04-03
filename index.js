@@ -16,6 +16,7 @@ const orderRouter  = require("./routes/order.router");
 const productRouter  = require("./routes/product.router");
 const promotionRouter  = require("./routes/promotion.router");
 const statusRouter  = require("./routes/status.router");
+const swaggerSetup = require('./docs/swagger');
 
 
 
@@ -26,9 +27,25 @@ try {
   console.log("DB Connection Failed");
 }
 
+const corsOptions = {
+  origin: true, // อนุญาตให้ทุก origin เข้าถึงได้
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  credentials: true,
+  maxAge: 600,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+
 app.use(cors({ origin: BASE_URL, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+
+// Setup Swagger
+swaggerSetup(app);
+
 app.get("/", (req, res) => {
   res.send("<h1>Welcom to SE NPRU Blog resfull api</h1>");
 });

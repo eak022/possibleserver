@@ -1,0 +1,3032 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+      "version": "1.0.0",
+      "title": "SE Shop REST API",
+      "description": "RESTful API for SE Shop",
+      "contact": {
+        
+      }
+    },
+    "servers": [
+      {
+        "url": "http://localhost:5000",
+        "description": "Development Server"
+      },
+      {
+        "url": "http://localhost:5000",
+        "description": "Production Server"
+      }
+    ],
+    "tags": [
+      {
+        "name": "Cart",
+        "description": "รถเข็น"
+      },
+      {
+        "name": "Category",
+        "description": "หมวดหมู่สินค้า"
+      },
+      {
+        "name": "Product",
+        "description": "สินค้า"
+      },
+      {
+        "name": "Order",
+        "description": "คำสั่งซื้อ"
+      },
+      {
+        "name": "User",
+        "description": "ผู้ใช้งาน"
+      },
+      {
+        "name": "Supplier",
+        "description": "ผู้จัดจำหน่าย"
+      },
+      {
+        "name": "Status",
+        "description": "สถานะ"
+      },
+      {
+        "name": "Promotion",
+        "description": "โปรโมชั่น"
+      },
+      {
+        "name": "PurchaseOrder",
+        "description": "คำสั่งซื้อ"
+      }
+    ],
+    "paths": {
+      "/api/v1/cart": {
+        "post": {
+          "tags": ["Cart"],
+          "summary": "เพิ่มสินค้าไปยังตะกร้า",
+          "description": "เพิ่มสินค้าไปยังตะกร้า",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["productId", "quantity", "userName", "pack"],
+                  "properties": {
+                    "productId": {
+                      "type": "string",
+                      "description": "ID ของสินค้า"
+                    },
+                    "quantity": {
+                      "type": "number",
+                      "description": "จำนวนสินค้า"
+                    },
+                    "userName": {
+                      "type": "string",
+                      "description": "ชื่อผู้ใช้"
+                    },
+                    "pack": {
+                      "type": "boolean",
+                      "description": "ซื้อเป็นแพ็คหรือไม่"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "เพิ่มสินค้าสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "_id": {
+                        "type": "string"
+                      },
+                      "productId": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "price": {
+                        "type": "number"
+                      },
+                      "image": {
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "type": "number"
+                      },
+                      "userName": {
+                        "type": "string"
+                      },
+                      "pack": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "ข้อมูลไม่ครบถ้วน",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Product information is missing!"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "ไม่พบสินค้า",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Product not found!"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาด",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Something went wrong!"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "get": {
+          "tags": ["Cart"],
+          "summary": "ดึงข้อมูลตะกร้าทั้งหมด",
+          "description": "ดึงข้อมูลตะกร้าทั้งหมด",
+          "responses": {
+            "200": {
+              "description": "ดึงข้อมูลสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Cart"
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาด",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Failed to get cart items."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/cart/add-with-barcode": {
+        "post": {
+          "tags": ["Cart"],
+          "summary": "เพิ่มสินค้าไปยังตะกร้าด้วยบาร์โค้ด",
+          "description": "เพิ่มสินค้าไปยังตะกร้าด้วยบาร์โค้ด",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["barcode", "quantity", "userName", "pack"],
+                  "properties": {
+                    "barcode": {
+                      "type": "string",
+                      "description": "บาร์โค้ดสินค้า"
+                    },
+                    "quantity": {
+                      "type": "number",
+                      "description": "จำนวนสินค้า"
+                    },
+                    "userName": {
+                      "type": "string",
+                      "description": "ชื่อผู้ใช้"
+                    },
+                    "pack": {
+                      "type": "boolean",
+                      "description": "ซื้อเป็นแพ็คหรือไม่"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "เพิ่มสินค้าสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "_id": {
+                        "type": "string"
+                      },
+                      "productId": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "price": {
+                        "type": "number"
+                      },
+                      "image": {
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "type": "number"
+                      },
+                      "userName": {
+                        "type": "string"
+                      },
+                      "pack": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "ข้อมูลไม่ครบถ้วน",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Product information is missing!"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "ไม่พบสินค้า",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Product not found!"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาด",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Something went wrong!"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/cart/{userName}": {
+        "get": {
+          "tags": ["Cart"],
+          "summary": "ดึงข้อมูลตะกร้าตามชื่อผู้ใช้",
+          "description": "ดึงข้อมูลตะกร้าตามชื่อผู้ใช้",
+          "parameters": [
+            {
+              "name": "userName",
+              "in": "path",
+              "required": true,
+              "description": "ชื่อผู้ใช้",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "ดึงข้อมูลสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Cart"
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาด",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Failed to get cart items."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/cart/{id}": {
+        "put": {
+          "tags": ["Cart"],
+          "summary": "อัปเดตตะกร้า",
+          "description": "อัปเดตข้อมูลตะกร้า",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "ID ของตะกร้า",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "quantity": {
+                      "type": "number",
+                      "description": "จำนวนสินค้า"
+                    },
+                    "pack": {
+                      "type": "boolean",
+                      "description": "ซื้อเป็นแพ็คหรือไม่"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "อัปเดตสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Cart"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "ไม่พบสินค้า",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Item not found!"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาด",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Failed to update cart item."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "delete": {
+          "tags": ["Cart"],
+          "summary": "ลบสินค้าในตะกร้า",
+          "description": "ลบสินค้าในตะกร้าตาม ID",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "ID ของตะกร้า",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "ลบสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Item deleted successfully!"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "ไม่พบสินค้า",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Item not found!"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาด",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Failed to delete cart item."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/cart/deleteAllCarts/{userName}": {
+        "delete": {
+          "tags": ["Cart"],
+          "summary": "ลบสินค้าทั้งหมดในตะกร้า",
+          "description": "ลบสินค้าทั้งหมดในตะกร้าของผู้ใช้",
+          "parameters": [
+            {
+              "name": "userName",
+              "in": "path",
+              "required": true,
+              "description": "ชื่อผู้ใช้",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "ลบสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "All cart items removed!"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาด",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Failed to delete cart items."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/product": {
+        "post": {
+          "tags": ["Product"],
+          "summary": "Create a new product",
+          "description": "Create a new product with image",
+          "security": [
+            {
+              "cookieAuth": []
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "multipart/form-data": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Product created successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Product created successfully"
+                      },
+                      "product": {
+                        "$ref": "#/components/schemas/Product"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Please upload a product image"
+            },
+            "500": {
+              "description": "Something went wrong while creating product"
+            }
+          }
+        },
+        "get": {
+          "tags": ["Product"],
+          "summary": "Get all products",
+          "description": "Retrieve all products with populated category and status",
+          "security": [
+            {
+              "cookieAuth": []
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "List of products",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "_id": {
+                          "type": "string",
+                          "description": "Product ID"
+                        },
+                        "productName": {
+                          "type": "string",
+                          "description": "ชื่อสินค้า"
+                        },
+                        "productDescription": {
+                          "type": "string",
+                          "description": "คำอธิบายสินค้า"
+                        },
+                        "productImage": {
+                          "type": "string",
+                          "description": "URL รูปภาพสินค้า"
+                        },
+                        "categoryId": {
+                          "type": "object",
+                          "properties": {
+                            "_id": {
+                              "type": "string",
+                              "description": "Category ID"
+                            },
+                            "categoryName": {
+                              "type": "string",
+                              "description": "ชื่อหมวดหมู่"
+                            }
+                          }
+                        },
+                        "packSize": {
+                          "type": "number",
+                          "description": "ขนาดบรรจุภัณฑ์"
+                        },
+                        "productStatus": {
+                          "type": "object",
+                          "properties": {
+                            "_id": {
+                              "type": "string",
+                              "description": "Status ID"
+                            },
+                            "statusName": {
+                              "type": "string",
+                              "description": "ชื่อสถานะ"
+                            }
+                          }
+                        },
+                        "barcodePack": {
+                          "type": "string",
+                          "description": "บาร์โค้ดของแพ็ค"
+                        },
+                        "barcodeUnit": {
+                          "type": "string",
+                          "description": "บาร์โค้ดของหน่วย"
+                        },
+                        "quantity": {
+                          "type": "number",
+                          "description": "จำนวน"
+                        },
+                        "purchasePrice": {
+                          "type": "number",
+                          "description": "ราคาซื้อ"
+                        },
+                        "sellingPricePerUnit": {
+                          "type": "number",
+                          "description": "ราคาขายต่อหน่วย"
+                        },
+                        "sellingPricePerPack": {
+                          "type": "number",
+                          "description": "ราคาขายต่อแพ็ค"
+                        },
+                        "expirationDate": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "วันที่หมดอายุ"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "วันที่สร้าง"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "วันที่อัปเดต"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Error occurred while fetching products"
+            }
+          }
+        }
+      },
+      "/api/v1/product/{id}": {
+        "get": {
+          "tags": ["Product"],
+          "summary": "Get product by ID",
+          "description": "Retrieve a specific product by ID",
+          "security": [
+            {
+              "cookieAuth": []
+            }
+          ],
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "Product ID",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Product details",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Product"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "put": {
+          "tags": ["Product"],
+          "summary": "Update product by ID",
+          "description": "Update an existing product",
+          "security": [
+            {
+              "cookieAuth": []
+            }
+          ],
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string"
+              },
+              "description": "Product ID"
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "multipart/form-data": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "productName": {
+                      "type": "string",
+                      "description": "ชื่อสินค้า"
+                    },
+                    "productDescription": {
+                      "type": "string",
+                      "description": "คำอธิบายสินค้า"
+                    },
+                    "categoryId": {
+                      "type": "string",
+                      "description": "ID ของหมวดหมู่"
+                    },
+                    "packSize": {
+                      "type": "string",
+                      "description": "ขนาดบรรจุภัณฑ์"
+                    },
+                    "productStatus": {
+                      "type": "string",
+                      "description": "ID ของสถานะสินค้า"
+                    },
+                    "barcodePack": {
+                      "type": "string",
+                      "description": "บาร์โค้ดของแพ็ค"
+                    },
+                    "barcodeUnit": {
+                      "type": "string",
+                      "description": "บาร์โค้ดของหน่วย"
+                    },
+                    "quantity": {
+                      "type": "number",
+                      "description": "จำนวน"
+                    },
+                    "purchasePrice": {
+                      "type": "number",
+                      "description": "ราคาซื้อ"
+                    },
+                    "sellingPricePerUnit": {
+                      "type": "number",
+                      "description": "ราคาขายต่อหน่วย"
+                    },
+                    "sellingPricePerPack": {
+                      "type": "number",
+                      "description": "ราคาขายต่อแพ็ค"
+                    },
+                    "expirationDate": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "วันที่หมดอายุ"
+                    },
+                    "productImage": {
+                      "type": "string",
+                      "format": "binary",
+                      "description": "รูปภาพสินค้า"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Product updated successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Product"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Product not found"
+            },
+            "500": {
+              "description": "Error occurred while updating product"
+            }
+          }
+        },
+        "delete": {
+          "tags": ["Product"],
+          "summary": "Delete product",
+          "description": "Delete an existing product",
+          "security": [
+            {
+              "cookieAuth": []
+            }
+          ],
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "Product ID",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Product deleted successfully"
+            }
+          }
+        }
+      },
+      "/api/v1/product/barcode/{barcode}": {
+        "get": {
+          "tags": ["Product"],
+          "summary": "Get product by barcode",
+          "description": "Retrieve a specific product by barcode",
+          "security": [
+            {
+              "cookieAuth": []
+            }
+          ],
+          "parameters": [
+            {
+              "name": "barcode",
+              "in": "path",
+              "required": true,
+              "description": "Product barcode",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Product details",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Product"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/auth/register": {
+        "post": {
+          "tags": ["User"],
+          "summary": "Register new user",
+          "description": "Register a new user account",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string"
+                    },
+                    "password": {
+                      "type": "string",
+                      "format": "password"
+                    }
+                  },
+                  "required": ["username", "password"]
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "User registered successfully"
+            }
+          }
+        }
+      },
+      "/api/v1/auth/login": {
+        "post": {
+          "tags": ["User"],
+          "summary": "User login",
+          "description": "Login with user credentials",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string"
+                    },
+                    "password": {
+                      "type": "string",
+                      "format": "password"
+                    }
+                  },
+                  "required": ["username", "password"]
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Login successful"
+            }
+          }
+        }
+      },
+      "/api/v1/auth/logout": {
+        "post": {
+          "tags": ["User"],
+          "summary": "User logout",
+          "description": "Logout current user",
+          "responses": {
+            "200": {
+              "description": "Logout successful"
+            }
+          }
+        }
+      },
+      "/api/v1/auth/updateProfile": {
+        "put": {
+          "tags": ["User"],
+          "summary": "Update user profile",
+          "description": "Update current user's profile",
+          "security": [
+            {
+              "bearerAuth": []
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "phoneNumber": {
+                      "type": "string",
+                      "description": "เบอร์โทรศัพท์"
+                    },
+                    "address": {
+                      "type": "string",
+                      "description": "ที่อยู่"
+                    },
+                    "shopName": {
+                      "type": "string",
+                      "description": "ชื่อร้าน"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Profile updated successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Profile updated successfully"
+                      },
+                      "user": {
+                        "type": "object",
+                        "properties": {
+                          "_id": {
+                            "type": "string",
+                            "example": "507f1f77bcf86cd799439011"
+                          },
+                          "username": {
+                            "type": "string",
+                            "example": "user123"
+                          },
+                          "phoneNumber": {
+                            "type": "string",
+                            "example": "0812345678"
+                          },
+                          "address": {
+                            "type": "string",
+                            "example": "123/4 ถนนสุขุมวิท"
+                          },
+                          "shopName": {
+                            "type": "string",
+                            "example": "ร้านค้าตัวอย่าง"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Bad Request",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Please provide all required fields"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "401": {
+              "description": "Unauthorized",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Access token is missing"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "403": {
+              "description": "Forbidden",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Invalid or expired token"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Not Found",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "User not found"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Internal Server Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Something went wrong while updating profile"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/category": {
+        "post": {
+          "tags": ["Category"],
+          "summary": "Create a new category",
+          "description": "Create a new category with categoryName",
+          "security": [
+            {
+              "cookieAuth": []
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["categoryName"],
+                  "properties": {
+                    "categoryName": {
+                      "type": "string",
+                      "description": "ชื่อหมวดหมู่"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Category created successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Category created successfully"
+                      },
+                      "category": {
+                        "$ref": "#/components/schemas/Category"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Please provide categoryName"
+            },
+            "500": {
+              "description": "Something went wrong while creating category"
+            }
+          }
+        },
+        "get": {
+          "tags": ["Category"],
+          "summary": "Get all categories",
+          "description": "Retrieve all categories",
+          "security": [
+            {
+              "cookieAuth": []
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Categories retrieved successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "categories": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/Category"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Something went wrong while fetching categories"
+            }
+          }
+        }
+      },
+      "/api/v1/category/{id}": {
+        "get": {
+          "tags": ["Category"],
+          "summary": "Get category by ID",
+          "description": "Retrieve a specific category by ID",
+          "security": [
+            {
+              "cookieAuth": []
+            }
+          ],
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string"
+              },
+              "description": "Category ID"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Category retrieved successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "category": {
+                        "$ref": "#/components/schemas/Category"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Category not found"
+            },
+            "500": {
+              "description": "Something went wrong while fetching category"
+            }
+          }
+        },
+        "put": {
+          "tags": ["Category"],
+          "summary": "Update category",
+          "description": "Update an existing category",
+          "security": [
+            {
+              "cookieAuth": []
+            }
+          ],
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string"
+              },
+              "description": "Category ID"
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "categoryName": {
+                      "type": "string",
+                      "description": "ชื่อหมวดหมู่"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Category updated successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Category updated successfully"
+                      },
+                      "category": {
+                        "$ref": "#/components/schemas/Category"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Category not found"
+            },
+            "500": {
+              "description": "Something went wrong while updating category"
+            }
+          }
+        },
+        "delete": {
+          "tags": ["Category"],
+          "summary": "Delete category",
+          "description": "Delete an existing category",
+          "security": [
+            {
+              "cookieAuth": []
+            }
+          ],
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string"
+              },
+              "description": "Category ID"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Category deleted successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Category deleted successfully"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Category not found"
+            },
+            "500": {
+              "description": "Something went wrong while deleting category"
+            }
+          }
+        }
+      },
+      "/api/v1/supplier/createSupplier": {
+        "post": {
+          "tags": ["Supplier"],
+          "summary": "Create a new supplier",
+          "description": "Create a new supplier",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Supplier"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Supplier created successfully"
+            }
+          }
+        }
+      },
+      "/api/v1/supplier/updateSupplierInfo/{id}": {
+        "put": {
+          "tags": ["Supplier"],
+          "summary": "Update supplier",
+          "description": "Update an existing supplier",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "Supplier ID",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Supplier"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Supplier updated successfully"
+            }
+          }
+        }
+      },
+      "/api/v1/supplier/deleteSupplier/{id}": {
+        "delete": {
+          "tags": ["Supplier"],
+          "summary": "Delete supplier",
+          "description": "Delete an existing supplier",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "Supplier ID",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Supplier deleted successfully"
+            }
+          }
+        }
+      },
+      "/api/v1/supplier/getAllSupplier": {
+        "get": {
+          "tags": ["Supplier"],
+          "summary": "Get all suppliers",
+          "description": "Retrieve all suppliers",
+          "responses": {
+            "200": {
+              "description": "List of suppliers",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Supplier"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/supplier/getSupplierById/{id}": {
+        "get": {
+          "tags": ["Supplier"],
+          "summary": "Get supplier by ID",
+          "description": "Retrieve a specific supplier by ID",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "Supplier ID",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Supplier details",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Supplier"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/promotion": {
+        "post": {
+          "tags": ["Promotion"],
+          "summary": "สร้างโปรโมชั่นใหม่",
+          "description": "สร้างโปรโมชั่นใหม่",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Promotion"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "สร้างโปรโมชั่นสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Promotion created successfully"
+                      },
+                      "promotion": {
+                        "$ref": "#/components/schemas/Promotion"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "กรุณากรอกข้อมูลให้ครบถ้วน",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Please provide all required fields"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาดในการสร้างโปรโมชั่น",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Something went wrong while creating promotion"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "get": {
+          "tags": ["Promotion"],
+          "summary": "ดึงข้อมูลโปรโมชั่นทั้งหมด",
+          "description": "ดึงข้อมูลโปรโมชั่นทั้งหมดพร้อมชื่อสินค้า",
+          "responses": {
+            "200": {
+              "description": "ดึงข้อมูลโปรโมชั่นสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "promotions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "_id": {
+                              "type": "string"
+                            },
+                            "productId": {
+                              "type": "object",
+                              "properties": {
+                                "_id": {
+                                  "type": "string"
+                                },
+                                "productName": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "promotionName": {
+                              "type": "string"
+                            },
+                            "discountedPrice": {
+                              "type": "number"
+                            },
+                            "validityStart": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "validityEnd": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาดในการดึงข้อมูลโปรโมชั่น",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Something went wrong while fetching promotions"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/promotion/{id}": {
+        "get": {
+          "tags": ["Promotion"],
+          "summary": "ดึงข้อมูลโปรโมชั่นตาม ID",
+          "description": "ดึงข้อมูลโปรโมชั่นตาม ID พร้อมชื่อสินค้า",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "ID ของโปรโมชั่น",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "ดึงข้อมูลโปรโมชั่นสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "promotion": {
+                        "type": "object",
+                        "properties": {
+                          "_id": {
+                            "type": "string"
+                          },
+                          "productId": {
+                            "type": "object",
+                            "properties": {
+                              "_id": {
+                                "type": "string"
+                              },
+                              "productName": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "promotionName": {
+                            "type": "string"
+                          },
+                          "discountedPrice": {
+                            "type": "number"
+                          },
+                          "validityStart": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "validityEnd": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "ไม่พบโปรโมชั่น",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Promotion not found"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาดในการดึงข้อมูลโปรโมชั่น",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Something went wrong while fetching promotion"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "put": {
+          "tags": ["Promotion"],
+          "summary": "อัปเดตโปรโมชั่น",
+          "description": "อัปเดตข้อมูลโปรโมชั่น",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "ID ของโปรโมชั่น",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "productId": {
+                      "type": "string",
+                      "description": "ID ของสินค้า"
+                    },
+                    "promotionName": {
+                      "type": "string",
+                      "description": "ชื่อโปรโมชั่น"
+                    },
+                    "discountedPrice": {
+                      "type": "number",
+                      "description": "ราคาที่ลดแล้ว"
+                    },
+                    "validityStart": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "วันที่เริ่มโปรโมชั่น"
+                    },
+                    "validityEnd": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "วันที่สิ้นสุดโปรโมชั่น"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "อัปเดตโปรโมชั่นสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Promotion updated successfully"
+                      },
+                      "promotion": {
+                        "$ref": "#/components/schemas/Promotion"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "ไม่พบโปรโมชั่น",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Promotion not found"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาดในการอัปเดตโปรโมชั่น",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Something went wrong while updating promotion"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "delete": {
+          "tags": ["Promotion"],
+          "summary": "ลบโปรโมชั่น",
+          "description": "ลบโปรโมชั่นตาม ID",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "ID ของโปรโมชั่น",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "ลบโปรโมชั่นสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Promotion deleted successfully"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "ไม่พบโปรโมชั่น",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Promotion not found"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาดในการลบโปรโมชั่น",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Something went wrong while deleting promotion"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/purchase-orders": {
+        "post": {
+          "tags": ["PurchaseOrder"],
+          "summary": "Create a new purchase order",
+          "description": "Create a new purchase order",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrder"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Purchase order created successfully"
+            }
+          }
+        },
+        "get": {
+          "tags": ["PurchaseOrder"],
+          "summary": "Get all purchase orders",
+          "description": "Retrieve all purchase orders",
+          "responses": {
+            "200": {
+              "description": "List of purchase orders",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PurchaseOrder"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/purchase-orders/{id}": {
+        "get": {
+          "tags": ["PurchaseOrder"],
+          "summary": "Get purchase order by ID",
+          "description": "Retrieve a specific purchase order by ID",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "Purchase Order ID",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Purchase order details",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PurchaseOrder"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "put": {
+          "tags": ["PurchaseOrder"],
+          "summary": "Update purchase order",
+          "description": "Update an existing purchase order",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "Purchase Order ID",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrder"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Purchase order updated successfully"
+            }
+          }
+        },
+        "delete": {
+          "tags": ["PurchaseOrder"],
+          "summary": "Delete purchase order",
+          "description": "Delete an existing purchase order",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "Purchase Order ID",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Purchase order deleted successfully"
+            }
+          }
+        }
+      },
+      "/api/v1/purchase-orders/{id}/receive": {
+        "post": {
+          "tags": ["PurchaseOrder"],
+          "summary": "Receive stock",
+          "description": "Receive stock for a purchase order",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "Purchase Order ID",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Stock received successfully"
+            }
+          }
+        }
+      },
+      "/api/v1/status": {
+        "post": {
+          "tags": ["Status"],
+          "summary": "Create a new status",
+          "description": "Create a new status",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Status created successfully"
+            }
+          }
+        },
+        "get": {
+          "tags": ["Status"],
+          "summary": "Get all statuses",
+          "description": "Retrieve all statuses",
+          "responses": {
+            "200": {
+              "description": "List of statuses",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Status"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/status/{id}": {
+        "get": {
+          "tags": ["Status"],
+          "summary": "Get status by ID",
+          "description": "Retrieve a specific status by ID",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "Status ID",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Status details",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Status"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "put": {
+          "tags": ["Status"],
+          "summary": "Update status",
+          "description": "Update an existing status",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "Status ID",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Status updated successfully"
+            }
+          }
+        },
+        "delete": {
+          "tags": ["Status"],
+          "summary": "Delete status",
+          "description": "Delete an existing status",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "Status ID",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Status deleted successfully"
+            }
+          }
+        }
+      },
+      "/api/v1/order": {
+        "post": {
+          "tags": ["Order"],
+          "summary": "สร้างคำสั่งซื้อใหม่",
+          "description": "สร้างคำสั่งซื้อใหม่จากสินค้าในตะกร้า",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["userName", "paymentMethod"],
+                  "properties": {
+                    "userName": {
+                      "type": "string",
+                      "description": "ชื่อผู้ใช้",
+                      "example": "string"
+                    },
+                    "paymentMethod": {
+                      "type": "string",
+                      "enum": ["Cash", "BankTransfer"],
+                      "description": "วิธีการชำระเงิน",
+                      "example": "string"
+                    },
+                    "cash_received": {
+                      "type": "number",
+                      "description": "จำนวนเงินที่รับ (กรณีชำระด้วยเงินสด)",
+                      "example": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "สร้างคำสั่งซื้อสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Order created successfully"
+                      },
+                      "order": {
+                        "$ref": "#/components/schemas/Order"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/order/{id}": {
+        "get": {
+          "tags": ["Order"],
+          "summary": "ดึงข้อมูลคำสั่งซื้อตาม ID",
+          "description": "ดึงข้อมูลคำสั่งซื้อตาม ID",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "ID ของคำสั่งซื้อ",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "ดึงข้อมูลสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/Order"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "ไม่พบคำสั่งซื้อ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Order not found"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาด",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Error retrieving order"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "put": {
+          "tags": ["Order"],
+          "summary": "อัปเดตรายละเอียดคำสั่งซื้อ",
+          "description": "อัปเดตรายละเอียดคำสั่งซื้อ",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "ID ของคำสั่งซื้อ",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "productId": {
+                      "type": "string",
+                      "description": "ID ของสินค้า"
+                    },
+                    "quantity": {
+                      "type": "number",
+                      "description": "จำนวนสินค้า"
+                    },
+                    "sellingPricePerUnit": {
+                      "type": "number",
+                      "description": "ราคาขายต่อหน่วย"
+                    },
+                    "pack": {
+                      "type": "boolean",
+                      "description": "ซื้อเป็นแพ็คหรือไม่"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "อัปเดตสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Order updated and stock adjusted"
+                      },
+                      "order": {
+                        "$ref": "#/components/schemas/Order"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "ข้อมูลไม่ครบถ้วนหรือไม่ถูกต้อง",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "No valid update parameters provided"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "ไม่พบคำสั่งซื้อหรือสินค้า",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Order not found"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาด",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Error updating order"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "delete": {
+          "tags": ["Order"],
+          "summary": "ลบคำสั่งซื้อ",
+          "description": "ลบคำสั่งซื้อและคืนสต็อกสินค้า",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "ID ของคำสั่งซื้อ",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "ลบสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Order deleted and stock updated"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "ไม่พบคำสั่งซื้อ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Order not found"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "เกิดข้อผิดพลาด",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Error deleting order"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/purchaseOrder": {
+        "post": {
+          "tags": ["PurchaseOrder"],
+          "summary": "สร้างใบสั่งซื้อใหม่",
+          "description": "สร้างใบสั่งซื้อสินค้าเข้าร้าน",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["userId", "supplierId", "products", "purchaseOrderDate"],
+                  "properties": {
+                    "userId": {
+                      "type": "string",
+                      "description": "ID ของผู้สั่งซื้อ"
+                    },
+                    "supplierId": {
+                      "type": "string",
+                      "description": "ID ของซัพพลายเออร์"
+                    },
+                    "products": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["productId", "quantity", "purchasePrice", "sellingPricePerUnit", "expirationDate"],
+                        "properties": {
+                          "productId": {
+                            "type": "string",
+                            "description": "ID ของสินค้า"
+                          },
+                          "quantity": {
+                            "type": "number",
+                            "description": "จำนวนที่สั่งซื้อ"
+                          },
+                          "purchasePrice": {
+                            "type": "number",
+                            "description": "ราคาซื้อต่อหน่วย"
+                          },
+                          "sellingPricePerUnit": {
+                            "type": "number",
+                            "description": "ราคาขายต่อหน่วย"
+                          },
+                          "expirationDate": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "วันหมดอายุ"
+                          }
+                        }
+                      }
+                    },
+                    "purchaseOrderDate": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "วันที่สั่งซื้อ"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "สร้างใบสั่งซื้อสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Purchase order created successfully"
+                      },
+                      "purchaseOrder": {
+                        "$ref": "#/components/schemas/PurchaseOrder"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/api/v1/purchaseOrder/{id}/receive": {
+        "post": {
+          "tags": ["PurchaseOrder"],
+          "summary": "รับสินค้าเข้าสต็อก",
+          "description": "รับสินค้าและเพิ่มจำนวนในสต็อก",
+          "parameters": [
+            {
+              "name": "id",
+              "in": "path",
+              "required": true,
+              "description": "ID ของใบสั่งซื้อ",
+              "schema": {
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "รับสินค้าสำเร็จ",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "example": "Stock received and updated successfully"
+                      },
+                      "purchaseOrder": {
+                        "$ref": "#/components/schemas/PurchaseOrder"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "schemas": {
+        "Order": {
+          "type": "object",
+          "required": ["userName", "products", "subtotal", "total", "paymentMethod", "orderDate"],
+          "properties": {
+            "userName": {
+              "type": "string",
+              "description": "ชื่อผู้ใช้",
+              "example": "string"
+            },
+            "products": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["productId", "image", "productName", "quantity", "purchasePrice", "sellingPricePerUnit", "pack"],
+                "properties": {
+                  "productId": {
+                    "type": "string",
+                    "description": "ID ของสินค้า",
+                    "example": "string"
+                  },
+                  "image": {
+                    "type": "string",
+                    "description": "URL รูปภาพสินค้า",
+                    "example": "string"
+                  },
+                  "productName": {
+                    "type": "string",
+                    "description": "ชื่อสินค้า",
+                    "example": "string"
+                  },
+                  "quantity": {
+                    "type": "number",
+                    "description": "จำนวนสินค้า",
+                    "example": 0
+                  },
+                  "purchasePrice": {
+                    "type": "number",
+                    "description": "ราคาซื้อ",
+                    "example": 0
+                  },
+                  "sellingPricePerUnit": {
+                    "type": "number",
+                    "description": "ราคาขายต่อหน่วย",
+                    "example": 0
+                  },
+                  "pack": {
+                    "type": "boolean",
+                    "description": "ซื้อเป็นแพ็คหรือไม่",
+                    "example": false
+                  }
+                }
+              }
+            },
+            "subtotal": {
+              "type": "number",
+              "description": "ราคารวมก่อนหักส่วนลด",
+              "example": 0
+            },
+            "total": {
+              "type": "number",
+              "description": "ราคารวมทั้งหมด",
+              "example": 0
+            },
+            "paymentMethod": {
+              "type": "string",
+              "enum": ["Cash", "BankTransfer"],
+              "description": "วิธีการชำระเงิน",
+              "example": "string"
+            },
+            "cash_received": {
+              "type": "number",
+              "description": "จำนวนเงินที่รับ (กรณีชำระด้วยเงินสด)",
+              "example": 0
+            },
+            "change": {
+              "type": "number",
+              "description": "เงินทอน (กรณีชำระด้วยเงินสด)",
+              "example": 0
+            },
+            "orderDate": {
+              "type": "string",
+              "format": "date-time",
+              "description": "วันที่สั่งซื้อ",
+              "example": "2024-03-20T10:30:00Z"
+            }
+          }
+        },
+        "Cart": {
+          "type": "object",
+          "required": ["productId", "quantity", "userName", "pack"],
+          "properties": {
+            "productId": {
+              "type": "string",
+              "description": "ID ของสินค้า"
+            },
+            "quantity": {
+              "type": "number",
+              "description": "จำนวนสินค้า"
+            },
+            "userName": {
+              "type": "string",
+              "description": "ชื่อผู้ใช้"
+            },
+            "pack": {
+              "type": "boolean",
+              "description": "ซื้อเป็นแพ็คหรือไม่"
+            },
+            "name": {
+              "type": "string",
+              "description": "ชื่อสินค้า"
+            },
+            "price": {
+              "type": "number",
+              "description": "ราคาสินค้า"
+            },
+            "image": {
+              "type": "string",
+              "description": "URL รูปภาพสินค้า"
+            }
+          }
+        },
+        "Product": {
+          "type": "object",
+          "required": ["productName", "productDescription", "categoryId", "packSize", "productStatus", "barcodePack", "barcodeUnit", "quantity", "purchasePrice", "sellingPricePerUnit", "sellingPricePerPack", "expirationDate", "productImage"],
+          "properties": {
+            "productName": {
+              "type": "string",
+              "description": "ชื่อสินค้า"
+            },
+            "productDescription": {
+              "type": "string",
+              "description": "คำอธิบายสินค้า"
+            },
+            "categoryId": {
+              "type": "string",
+              "description": "ID ของหมวดหมู่"
+            },
+            "packSize": {
+              "type": "string",
+              "description": "ขนาดบรรจุภัณฑ์"
+            },
+            "productStatus": {
+              "type": "string",
+              "description": "ID ของสถานะสินค้า"
+            },
+            "barcodePack": {
+              "type": "string",
+              "description": "บาร์โค้ดของแพ็ค"
+            },
+            "barcodeUnit": {
+              "type": "string",
+              "description": "บาร์โค้ดของหน่วย"
+            },
+            "quantity": {
+              "type": "number",
+              "description": "จำนวน"
+            },
+            "purchasePrice": {
+              "type": "number",
+              "description": "ราคาซื้อ"
+            },
+            "sellingPricePerUnit": {
+              "type": "number",
+              "description": "ราคาขายต่อหน่วย"
+            },
+            "sellingPricePerPack": {
+              "type": "number",
+              "description": "ราคาขายต่อแพ็ค"
+            },
+            "expirationDate": {
+              "type": "string",
+              "format": "date",
+              "description": "วันที่หมดอายุ"
+            },
+            "productImage": {
+              "type": "string",
+              "format": "binary",
+              "description": "รูปภาพสินค้า"
+            }
+          }
+        },
+        "User": {
+          "type": "object",
+          "properties": {
+            "username": {
+              "type": "string"
+            },
+            "password": {
+              "type": "string",
+              "format": "password"
+            },
+            "phoneNumber": {
+              "type": "string"
+            },
+            "address": {
+              "type": "string"
+            },
+            "shopName": {
+              "type": "string"
+            }
+          }
+        },
+        "Category": {
+          "_id": {
+            "type": "string",
+            "description": "Category ID"
+          },
+          "categoryName": {
+            "type": "string",
+            "description": "ชื่อหมวดหมู่"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "วันที่สร้าง"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "วันที่อัปเดต"
+          }
+        },
+        "Supplier": {
+          "type": "object",
+          "required": ["companyName", "sellerName", "address", "phoneNumber"],
+          "properties": {
+            "companyName": {
+              "type": "string",
+              "description": "ชื่อบริษัท"
+            },
+            "sellerName": {
+              "type": "string",
+              "description": "ชื่อผู้ขาย"
+            },
+            "address": {
+              "type": "string",
+              "description": "ที่อยู่"
+            },
+            "phoneNumber": {
+              "type": "string",
+              "description": "เบอร์โทรศัพท์"
+            }
+          }
+        },
+        "Promotion": {
+          "type": "object",
+          "required": ["productId", "promotionName", "discountedPrice", "validityStart", "validityEnd"],
+          "properties": {
+            "productId": {
+              "type": "string",
+              "description": "ID ของสินค้า"
+            },
+            "promotionName": {
+              "type": "string",
+              "description": "ชื่อโปรโมชั่น"
+            },
+            "discountedPrice": {
+              "type": "number",
+              "description": "ราคาที่ลดแล้ว"
+            },
+            "validityStart": {
+              "type": "string",
+              "format": "date-time",
+              "description": "วันที่เริ่มโปรโมชั่น"
+            },
+            "validityEnd": {
+              "type": "string",
+              "format": "date-time",
+              "description": "วันที่สิ้นสุดโปรโมชั่น"
+            }
+          }
+        },
+        "PurchaseOrder": {
+          "type": "object",
+          "required": ["userId", "supplierId", "products", "purchaseOrderDate"],
+          "properties": {
+            "userId": {
+              "type": "string",
+              "description": "ID ของผู้สั่งซื้อ"
+            },
+            "supplierId": {
+              "type": "string",
+              "description": "ID ของซัพพลายเออร์"
+            },
+            "products": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["productId", "quantity", "purchasePrice", "sellingPricePerUnit", "expirationDate"],
+                "properties": {
+                  "productId": {
+                    "type": "string",
+                    "description": "ID ของสินค้า"
+                  },
+                  "productName": {
+                    "type": "string",
+                    "description": "ชื่อสินค้า"
+                  },
+                  "quantity": {
+                    "type": "number",
+                    "description": "จำนวนที่สั่งซื้อ"
+                  },
+                  "purchasePrice": {
+                    "type": "number",
+                    "description": "ราคาซื้อต่อหน่วย"
+                  },
+                  "sellingPricePerUnit": {
+                    "type": "number",
+                    "description": "ราคาขายต่อหน่วย"
+                  },
+                  "expirationDate": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "วันหมดอายุ"
+                  },
+                  "subtotal": {
+                    "type": "number",
+                    "description": "ราคารวมของสินค้า"
+                  }
+                }
+              }
+            },
+            "total": {
+              "type": "number",
+              "description": "ราคารวมทั้งหมด"
+            },
+            "purchaseOrderDate": {
+              "type": "string",
+              "format": "date",
+              "description": "วันที่สั่งซื้อ"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["pending", "completed"],
+              "description": "สถานะของใบสั่งซื้อ"
+            }
+          }
+        },
+        "Status": {
+          "type": "object",
+          "required": ["statusName"],
+          "properties": {
+            "statusName": {
+              "type": "string",
+              "description": "ชื่อสถานะ"
+            }
+          }
+        }
+      },
+      "securitySchemes": {
+        "bearerAuth": {
+          "type": "http",
+          "scheme": "bearer",
+          "bearerFormat": "JWT"
+        },
+        "cookieAuth": {
+          "type": "apiKey",
+          "in": "cookie",
+          "name": "x-access-token"
+        }
+      }
+    },
+    "security": [
+      {
+        "cookieAuth": []
+      }
+    ]
+  } 
