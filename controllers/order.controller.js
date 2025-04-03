@@ -36,27 +36,31 @@ exports.createOrder = async (req, res) => {
     const products = [];
     
     for (const item of cartItems) {
-      subtotal += item.price * item.quantity;
-      products.push({
-        productId: item.productId,
-        image: item.image,
-        productName: item.name,
-        quantity: item.quantity,
-        purchasePrice: item.price,
-        sellingPricePerUnit: item.price,
-        pack:item.pack,
-      });
-
       const product = await ProductModel.findById(item.productId);
       if (!product) {
         return res.status(404).json({ message: `Product ${item.productName} not found` });
       }
 
       let requiredQuantity = item.quantity;
-      // ถ้า pack เป็น true คูณจำนวนด้วย packSize ก่อน
-      if (item.pack ) {
+      if (item.pack) {
         requiredQuantity *= product.packSize;
       }
+
+      // ใช้ราคาทุนจาก ProductModel
+      const purchasePrice = item.pack 
+        ? product.purchasePrice * product.packSize  // ถ้าเป็นแพ็ค คูณ packSize
+        : product.purchasePrice; // ถ้าเป็นหน่วยเดียว ใช้ราคาปกติ
+
+      subtotal += item.price * item.quantity;
+      products.push({
+        productId: item.productId,
+        image: item.image,
+        productName: item.name,
+        quantity: item.quantity,
+        purchasePrice: purchasePrice, // ✅ แก้ให้ใช้ราคาทุนแทน
+        sellingPricePerUnit: item.price,
+        pack: item.pack,
+      });
 
       // ตัดสต็อกสินค้า
       await ProductModel.findByIdAndUpdate(item.productId, {

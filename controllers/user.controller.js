@@ -97,3 +97,17 @@ exports.updateProfile = async (req, res) => {
     return res.status(500).json({ message: error.message || "Something went wrong while updating profile" });
   }
 };
+
+// ตรวจสอบสถานะการเข้าสู่ระบบ
+exports.checkAuth = async (req, res) => {
+  try {
+    // req.user จะถูกเพิ่มโดย middleware authenticateToken
+    const user = await UserModel.findById(req.user.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    return res.status(200).json({ user });
+  } catch (error) {
+    return res.status(500).json({ message: error.message || "Something went wrong while checking auth" });
+  }
+};

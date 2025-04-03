@@ -65,8 +65,9 @@ exports.createCart = async (req, res) => {
 
   
   exports.getCartsByUserName = async (req, res) => {
+
   try {
-    const carts = await CartModel.find({ userName: req.user.name });
+    const carts = await CartModel.find({ userName: req.params.userName });
     res.json(carts);
   } catch (error) {
     res
