@@ -21,21 +21,42 @@ exports.receiveStock = async (req, res) => {
         return res.status(404).json({ message: `Product with ID ${item.productId} not found` });
       }
 
+      // คำนวณจำนวนสินค้าที่จะเพิ่ม
+      let quantityToAdd;
+      if (item.pack && product.packSize) {
+        // ถ้าเป็นแพ็ค ให้คูณด้วย packSize
+        quantityToAdd = item.quantity * product.packSize;
+        console.log(`Adding pack: ${item.quantity} packs × ${product.packSize} units = ${quantityToAdd} units`);
+      } else {
+        // ถ้าเป็นชิ้น ใช้จำนวนปกติ
+        quantityToAdd = item.quantity;
+        console.log(`Adding units: ${quantityToAdd} units`);
+      }
+
       // เติมสต็อกสินค้า
-      product.quantity += item.quantity;
+      product.quantity += quantityToAdd;
 
       // อัปเดตวันหมดอายุ
-      product.expirationDate = item.expirationDate;
+      if (item.expirationDate) {
+        product.expirationDate = item.expirationDate;
+      }
 
       // บันทึกการเปลี่ยนแปลง
       await product.save();
+
+      // เก็บ log การเปลี่ยนแปลง
+      console.log(`Updated product ${product.productName}: Added ${quantityToAdd} units, New total: ${product.quantity}`);
     }
 
     // เปลี่ยนสถานะของใบสั่งซื้อเป็น completed
     purchaseOrder.status = "completed";
     await purchaseOrder.save();
 
-    return res.status(200).json({ message: "Stock received and updated successfully", purchaseOrder });
+    return res.status(200).json({ 
+      message: "Stock received and updated successfully", 
+      purchaseOrder,
+      details: "Check server logs for detailed update information"
+    });
   } catch (error) {
     console.error("Error receiving stock:", error);
     res.status(500).json({ message: "Error receiving stock", error });
@@ -64,12 +85,13 @@ exports.createPurchaseOrder = async (req, res) => {
       // อัปเดตข้อมูลสินค้า
       updatedProducts.push({
         productId: item.productId,
-        productName: product.productName, // ดึงชื่อสินค้าจากฐานข้อมูล
+        productName: product.productName,
         quantity: item.quantity,
         purchasePrice: item.purchasePrice,
         sellingPricePerUnit: item.sellingPricePerUnit,
         expirationDate: item.expirationDate,
-        subtotal: subtotal // ใส่ subtotal ที่คำนวณแล้ว
+        subtotal: subtotal,
+        pack: item.pack // เพิ่มฟิลด์ pack
       });
     }
 
@@ -90,7 +112,6 @@ exports.createPurchaseOrder = async (req, res) => {
     res.status(500).json({ message: "Error creating purchase order", error });
   }
 };
-
 exports.getAllPurchaseOrders = async (req, res) => {
   try {
     const purchaseOrders = await PurchaseOrderModel.find().populate('userId supplierId products.productId');

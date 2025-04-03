@@ -101,7 +101,6 @@ exports.createOrder = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 exports.getOrders = async (req, res) => {
   try {
     const orders = await OrderModel.find().sort({ createdAt: -1 });
