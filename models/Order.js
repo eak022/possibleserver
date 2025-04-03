@@ -32,7 +32,8 @@ const OrderSchema = new Schema({
   },
   cash_received: { type: Number, default: 0 },
   change: { type: Number, default: 0 },
-  orderDate: { type: Date, required: true }
+  orderDate: { type: Date, required: true },
+  status: { type: String, default: "ขายสำเร็จ" }
 }, { timestamps: true });
 
 const OrderModel = model("Order", OrderSchema);

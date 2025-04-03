@@ -21,6 +21,11 @@ exports.receiveStock = async (req, res) => {
         return res.status(404).json({ message: `Product with ID ${item.productId} not found` });
       }
 
+      // ตรวจสอบว่ามีวันหมดอายุหรือไม่
+      if (!item.expirationDate) {
+        return res.status(400).json({ message: `Expiration date is required for product ${item.productId}` });
+      }
+
       // คำนวณจำนวนสินค้าที่จะเพิ่ม
       let quantityToAdd;
       if (item.pack && product.packSize) {
@@ -37,9 +42,7 @@ exports.receiveStock = async (req, res) => {
       product.quantity += quantityToAdd;
 
       // อัปเดตวันหมดอายุ
-      if (item.expirationDate) {
-        product.expirationDate = item.expirationDate;
-      }
+      product.expirationDate = item.expirationDate;
 
       // บันทึกการเปลี่ยนแปลง
       await product.save();
@@ -62,6 +65,7 @@ exports.receiveStock = async (req, res) => {
     res.status(500).json({ message: "Error receiving stock", error });
   }
 };
+
 
 exports.createPurchaseOrder = async (req, res) => {
   try {
