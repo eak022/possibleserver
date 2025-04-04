@@ -8,7 +8,6 @@ const BASE_URL = process.env.BASE_URL;
 const PORT = process.env.PORT;
 const DB_URL = process.env.DB_URL;
 const API_URL = process.env.NODE_ENV === 'production' ? process.env.PROD_API_URL : process.env.DEV_API_URL;
-const WS_URL = process.env.NODE_ENV === 'production' ? process.env.WS_PROD_URL : process.env.WS_DEV_URL;
 const userRouter = require("./routes/user.router");
 const supplierRouter = require("./routes/supplier.router");
 const purchaseOrderRouter  = require("./routes/purchaseOrder.router");
@@ -22,7 +21,6 @@ const swaggerSetup = require('./docs/swagger');
 
 
 
-
 try {
   mongoose.connect(DB_URL);
   console.log("Connect to mongo DB Successfully");
@@ -31,11 +29,7 @@ try {
 }
 
 const corsOptions = {
-  origin: [
-    BASE_URL, 
-    API_URL, 
-    'https://possibleserver.onrender.com'
-  ],
+  origin: [BASE_URL, API_URL], // อนุญาตทั้ง frontend และ API URL
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
