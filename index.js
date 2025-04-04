@@ -39,7 +39,10 @@ const corsOptions = {
 };
 
 
-app.use(cors({ origin: BASE_URL, credentials: true }));
+app.use(cors(corsOptions));
+
+// เพิ่ม middleware สำหรับ OPTIONS requests
+app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
