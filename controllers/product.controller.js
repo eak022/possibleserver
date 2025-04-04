@@ -72,63 +72,67 @@ exports.getProductById = async (req, res) => {
 
 exports.updateProductById = async (req, res) => {
   const { id } = req.params;
-  const {
-    productName,
-    productDescription,
-    categoryId,
-    packSize,
-    productStatus,
-    barcodePack,
-    barcodeUnit,
-    quantity,
-    purchasePrice,
-    sellingPricePerUnit,
-    sellingPricePerPack,
-    expirationDate
-  } = req.body;
-
   try {
+    // ค้นหาสินค้าที่ต้องการอัพเดท
     let product = await ProductModel.findById(id);
     if (!product) {
-      return res.status(404).send({ message: "Product not found." });
+      return res.status(404).send({ message: "ไม่พบสินค้า" });
     }
 
-    let imageUrl = product.productImage; // ค่าดั้งเดิมของรูปภาพ
-
-    // 📌 เช็คว่ามีไฟล์ใหม่ถูกอัปโหลดหรือไม่
+    // ถ้ามีการอัพโหลดรูปภาพใหม่
     if (req.file) {
-      // ✅ อัปโหลดรูปไปที่ Cloudinary
-      const uploadResponse = await cloudinary.uploader.upload(req.file.path, {
-        folder: "products",
-      });
-      imageUrl = uploadResponse.secure_url; // URL ของรูปที่อัปโหลดใหม่
+      try {
+        // อัพโหลดรูปใหม่ไปยัง Cloudinary
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: "products"
+        });
+
+        // ลบรูปเก่าจาก Cloudinary ถ้ามี
+        if (product.productImage) {
+          const publicId = product.productImage.split('/').pop().split('.')[0];
+          await cloudinary.uploader.destroy(`products/${publicId}`);
+        }
+
+        // อัพเดทเฉพาะรูปภาพ
+        const updatedProduct = await ProductModel.findByIdAndUpdate(
+          id,
+          { productImage: result.secure_url },
+          { new: true }
+        ).populate("categoryId", "categoryName")
+         .populate("productStatus", "statusName");
+
+        return res.json({
+          message: "อัพเดทรูปภาพสำเร็จ",
+          product: updatedProduct
+        });
+
+      } catch (error) {
+        console.log("Error uploading image:", error);
+        return res.status(500).send({ message: "เกิดข้อผิดพลาดในการอัพโหลดรูปภาพ" });
+      }
     }
 
-    // 📌 อัปเดตข้อมูลสินค้า
-    const updatedProduct = await ProductModel.findByIdAndUpdate(
-      id,
-      {
-        productName,
-        productDescription,
-        productImage: imageUrl, // ✅ ใช้ URL ของ Cloudinary
-        categoryId,
-        packSize,
-        productStatus,
-        barcodePack,
-        barcodeUnit,
-        quantity,
-        purchasePrice,
-        sellingPricePerUnit,
-        sellingPricePerPack,
-        expirationDate
-      },
-      { new: true }
-    );
+    // ถ้ามีการอัพเดทข้อมูลอื่นๆ (ไม่รวมรูปภาพ)
+    if (Object.keys(req.body).length > 0) {
+      const updatedProduct = await ProductModel.findByIdAndUpdate(
+        id,
+        req.body,
+        { new: true }
+      ).populate("categoryId", "categoryName")
+       .populate("productStatus", "statusName");
 
-    res.json(updatedProduct);
+      return res.json({
+        message: "อัพเดทข้อมูลสำเร็จ",
+        product: updatedProduct
+      });
+    }
+
+    // ถ้าไม่มีการอัพเดทอะไรเลย
+    return res.status(400).send({ message: "กรุณาระบุข้อมูลที่ต้องการอัพเดท" });
+
   } catch (error) {
     console.log(error.message);
-    res.status(500).send({ message: "Error occurred while updating product." });
+    res.status(500).send({ message: "เกิดข้อผิดพลาดในการอัพเดทสินค้า" });
   }
 };
 
