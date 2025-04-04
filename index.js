@@ -7,6 +7,7 @@ const app = express();
 const BASE_URL = process.env.BASE_URL;
 const PORT = process.env.PORT;
 const DB_URL = process.env.DB_URL;
+const API_URL = process.env.NODE_ENV === 'production' ? process.env.PROD_API_URL : process.env.DEV_API_URL;
 const userRouter = require("./routes/user.router");
 const supplierRouter = require("./routes/supplier.router");
 const purchaseOrderRouter  = require("./routes/purchaseOrder.router");
@@ -28,11 +29,11 @@ try {
 }
 
 const corsOptions = {
-  origin: true, // อนุญาตให้ทุก origin เข้าถึงได้
+  origin: [BASE_URL, API_URL], // อนุญาตทั้ง frontend และ API URL
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  credentials: true,
   maxAge: 600,
   preflightContinue: false,
   optionsSuccessStatus: 204

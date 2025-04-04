@@ -1,23 +1,29 @@
 {
-    "openapi": "3.0.0",
-    "info": {
-      "version": "1.0.0",
-      "title": "SE Shop REST API",
-      "description": "RESTful API for SE Shop",
-      "contact": {
-        
+   "openapi": "3.0.0",
+  "info": {
+    "version": "1.0.0",
+    "title": "SE Shop REST API",
+    "description": "RESTful API for SE Shop",
+    "contact": {}
+  },
+  "servers": [
+    {
+      "url": "{protocol}://{host}",
+      "description": "API Server",
+      "variables": {
+        "protocol": {
+          "enum": ["http", "https"],
+          "default": "http",
+          "description": "โปรโตคอลที่ใช้ในการเชื่อมต่อ"
+        },
+        "host": {
+          "enum": ["localhost:5000", "api.possible.co.th"],
+          "default": "localhost:5000",
+          "description": "เซิร์ฟเวอร์ที่ใช้งาน (development หรือ production)"
+        }
       }
-    },
-    "servers": [
-      {
-        "url": "http://localhost:5000",
-        "description": "Development Server"
-      },
-      {
-        "url": "http://localhost:5000",
-        "description": "Production Server"
-      }
-    ],
+    }
+  ],
     "tags": [
       {
         "name": "Cart",
