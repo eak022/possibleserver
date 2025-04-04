@@ -1,13 +1,13 @@
 const swaggerConfig = {
     getBaseUrl: () => {
       return process.env.NODE_ENV === 'production'
-        ? process.env.PROD_API_URL
+        ? 'https://possibleserver.onrender.com'  // กำหนดค่าตรงๆ สำหรับ production
         : process.env.DEV_API_URL;
     },
     
     getSwaggerOptions: () => {
       const baseUrl = process.env.NODE_ENV === 'production'
-        ? process.env.PROD_API_URL
+        ? 'https://possibleserver.onrender.com'  // กำหนดค่าตรงๆ สำหรับ production
         : process.env.DEV_API_URL;
   
       return {
