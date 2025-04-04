@@ -20,7 +20,7 @@ exports.register = async (req, res) => {
 
     const salt = await bcrypt.genSalt(10); // ใช้ async/await
     const hashedPassword = await bcrypt.hash(password, salt);
-    
+
     const user = await UserModel.create({ username, password: hashedPassword });
     return res.status(201).json({ message: "User registered successfully", user });
   } catch (error) {
@@ -55,10 +55,10 @@ exports.login = async (req, res) => {
 
     // ส่ง Token ผ่าน HttpOnly Cookie
     res.cookie("x-access-token", token, {
-      httpOnly: true, // ป้องกัน XSS (JavaScript ฝั่ง Client ไม่สามารถเข้าถึง)
-      secure: process.env.NODE_ENV === "production", // ใช้ secure mode บน HTTPS
-      sameSite: "Strict", // ป้องกัน CSRF
-      maxAge: 24 * 60 * 60 * 1000, // 1 วัน
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: 24 * 60 * 60 * 1000,
     });
 
     return res.status(200).json({ message: "User logged in successfully" });
@@ -71,11 +71,12 @@ exports.login = async (req, res) => {
 exports.logout = (req, res) => {
   res.clearCookie("x-access-token", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "Strict",
+    secure: true,
+    sameSite: "none",
   });
   return res.status(200).json({ message: "User logged out successfully" });
 };
+
 // Update Profile
 exports.updateProfile = async (req, res) => {
   const { phoneNumber, address, shopName } = req.body;
