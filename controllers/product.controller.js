@@ -93,7 +93,7 @@ exports.updateProductById = async (req, res) => {
           await cloudinary.uploader.destroy(`products/${publicId}`);
         }
 
-        // อัพเดทเฉพาะรูปภาพ
+        // อัพเดทเฉพาะรูปภาพได
         const updatedProduct = await ProductModel.findByIdAndUpdate(
           id,
           { productImage: result.secure_url },
