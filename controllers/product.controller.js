@@ -37,7 +37,7 @@ exports.getAllProducts = async (req, res) => {
   try {
     const products = await ProductModel.find()
       .populate("categoryId", "categoryName")
-      .populate("productStatus", "statusName");
+      .populate("productStatuses", "statusName statusColor");
     res.json(products);
   } catch (error) {
     console.log(error.message);
@@ -53,7 +53,7 @@ exports.getProductById = async (req, res) => {
   try {
     const product = await ProductModel.findById(id)
       .populate("categoryId", "categoryName")
-      .populate("productStatus", "statusName");
+      .populate("productStatuses", "statusName statusColor");
 
     if (!product) {
       return res.status(404).send({
@@ -99,7 +99,7 @@ exports.updateProductById = async (req, res) => {
           { productImage: result.secure_url },
           { new: true }
         ).populate("categoryId", "categoryName")
-         .populate("productStatus", "statusName");
+         .populate("productStatuses", "statusName statusColor");
 
         return res.json({
           message: "อัพเดทรูปภาพสำเร็จ",
@@ -119,7 +119,7 @@ exports.updateProductById = async (req, res) => {
         req.body,
         { new: true }
       ).populate("categoryId", "categoryName")
-       .populate("productStatus", "statusName");
+       .populate("productStatuses", "statusName statusColor");
 
       return res.json({
         message: "อัพเดทข้อมูลสำเร็จ",
@@ -172,7 +172,7 @@ exports.getProductByBarcode = async (req, res) => {
       $or: [{ barcodePack: barcode }, { barcodeUnit: barcode }] // ค้นหาตาม barcodePack หรือ barcodeUnit
     })
       .populate("categoryId", "categoryName")
-      .populate("productStatus", "statusName");
+      .populate("productStatuses", "statusName statusColor");
 
     if (!product) {
       return res.status(404).send({

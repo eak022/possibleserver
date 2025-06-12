@@ -17,9 +17,9 @@ const orderRouter  = require("./routes/order.router");
 const productRouter  = require("./routes/product.router");
 const promotionRouter  = require("./routes/promotion.router");
 const statusRouter  = require("./routes/status.router");
+const notificationRouter = require('./routes/notification.router');
 const swaggerSetup = require('./docs/swagger');
-
-
+const { initializeStatuses } = require('./config/initialData');
 
 try {
   mongoose.connect(DB_URL);
@@ -39,13 +39,13 @@ const corsOptions = {
   optionsSuccessStatus: 204
 };
 
-
 app.use(cors(corsOptions));
-
-// เพิ่ม middleware สำหรับ OPTIONS requests
 app.options('*', cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
+
+// เรียกใช้ฟังก์ชันเริ่มต้นข้อมูล
+initializeStatuses();
 
 // Setup Swagger
 swaggerSetup(app);
@@ -53,7 +53,6 @@ swaggerSetup(app);
 app.get("/", (req, res) => {
   res.send("<h1>Welcom to SE NPRU Blog resfull api</h1>");
 });
-
 
 app.use("/api/v1/cart", cartRouter);
 app.use("/api/v1/category", categoryRouter);
@@ -64,6 +63,8 @@ app.use("/api/v1/status", statusRouter);
 app.use("/api/v1/purchase-orders", purchaseOrderRouter);
 app.use("/api/v1/supplier", supplierRouter);
 app.use("/api/v1/auth", userRouter);
+app.use('/api/v1/notifications', notificationRouter);
+
 app.listen(PORT, () => {
   console.log("Server is running on http://localhost:" + PORT);
 });

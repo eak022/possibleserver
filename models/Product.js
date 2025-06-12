@@ -7,7 +7,7 @@ const ProductSchema = new Schema({
     productImage: { type: String },
     categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true },
     packSize: { type: Number, required: true },
-    productStatus: { type: Schema.Types.ObjectId, ref: "Status", required: true },
+    productStatuses: [{ type: Schema.Types.ObjectId, ref: "Status" }],
     barcodePack: { type: String, unique: true },
     barcodeUnit: { type: String, unique: true },
     quantity: { type: Number, required: true },
