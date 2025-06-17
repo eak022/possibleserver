@@ -206,3 +206,52 @@ exports.updateOrderDetail = async (req, res) => {
     res.status(500).json({ message: "Error updating order", error });
   }
 };
+
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { orderStatus } = req.body;
+    const order = await OrderModel.findById(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({ message: "ไม่พบคำสั่งซื้อ" });
+    }
+
+    // ตรวจสอบว่าสถานะใหม่เป็นค่าที่ถูกต้อง
+    const validStatuses = ["ขายสำเร็จ", "ยกเลิก", "คืนสินค้า", "ทิ้ง"];
+    if (!validStatuses.includes(orderStatus)) {
+      return res.status(400).json({ 
+        message: "สถานะไม่ถูกต้อง", 
+        validStatuses 
+      });
+    }
+
+    // ถ้าสถานะเดิมเป็น "ขายสำเร็จ" และจะเปลี่ยนเป็น "ยกเลิก" หรือ "คืนสินค้า"
+    if (order.orderStatus === "ขายสำเร็จ" && (orderStatus === "ยกเลิก" || orderStatus === "คืนสินค้า")) {
+      // คืนสต็อกสินค้า
+      for (const item of order.products) {
+        let quantityToReturn = item.quantity;
+        if (item.pack) {
+          const product = await ProductModel.findById(item.productId);
+          if (product) {
+            quantityToReturn *= product.packSize;
+          }
+        }
+        await ProductModel.findByIdAndUpdate(item.productId, {
+          $inc: { quantity: quantityToReturn }
+        });
+      }
+    }
+
+    // อัพเดทสถานะ
+    order.orderStatus = orderStatus;
+    await order.save();
+
+    res.status(200).json({ 
+      message: "อัพเดทสถานะสำเร็จ", 
+      order 
+    });
+  } catch (error) {
+    console.error("Error updating order status:", error);
+    res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัพเดทสถานะ" });
+  }
+};

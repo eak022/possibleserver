@@ -33,7 +33,12 @@ const OrderSchema = new Schema({
   cash_received: { type: Number, default: 0 },
   change: { type: Number, default: 0 },
   orderDate: { type: Date, required: true },
-  status: { type: String, default: "ขายสำเร็จ" }
+  orderStatus: { 
+    type: String, 
+    required: true,
+    enum: ["ขายสำเร็จ", "ยกเลิก", "คืนสินค้า", "ทิ้ง"],
+    default: "ขายสำเร็จ"
+  }
 }, { timestamps: true });
 
 const OrderModel = model("Order", OrderSchema);
