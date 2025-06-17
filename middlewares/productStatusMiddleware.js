@@ -9,12 +9,13 @@ const updateProductStatus = async (req, res, next) => {
         const sevenDaysFromNow = new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000));
 
         // ดึงสถานะทั้งหมด
-        const [placedStatus, lowStockStatus, expiringStatus, outOfStockStatus, discontinuedStatus] = await Promise.all([
+        const [placedStatus, lowStockStatus, expiringStatus, outOfStockStatus, discontinuedStatus, expiredStatus] = await Promise.all([
             StatusModel.findOne({ statusName: 'วางจำหน่าย' }),
             StatusModel.findOne({ statusName: 'สินค้าใกล้หมด' }),
             StatusModel.findOne({ statusName: 'สินค้าใกล้หมดอายุ' }),
             StatusModel.findOne({ statusName: 'สินค้าหมด' }),
-            StatusModel.findOne({ statusName: 'เลิกขาย' })
+            StatusModel.findOne({ statusName: 'เลิกขาย' }),
+            StatusModel.findOne({ statusName: 'หมดอายุ' })
         ]);
 
         for (const product of products) {
@@ -29,21 +30,26 @@ const updateProductStatus = async (req, res, next) => {
                 // ถ้าเป็นเลิกขาย ให้มีแค่สถานะเลิกขายอย่างเดียว
                 newStatuses = [discontinuedStatus];
             } else {
-                // ตรวจสอบสินค้าหมด
-                if (product.quantity <= 0) {
-                    newStatuses = [outOfStockStatus];
+                // เริ่มต้นด้วยสถานะวางจำหน่าย
+                newStatuses = [placedStatus];
+
+                // ตรวจสอบสินค้าหมดอายุ
+                if (product.expirationDate && product.expirationDate <= now) {
+                    newStatuses = [expiredStatus]; // ถ้าหมดอายุแล้ว ให้มีแค่สถานะหมดอายุอย่างเดียว
                 } else {
-                    // เริ่มต้นด้วยสถานะวางจำหน่าย
-                    newStatuses = [placedStatus];
+                    // ตรวจสอบสินค้าหมด
+                    if (product.quantity <= 0) {
+                        newStatuses = [outOfStockStatus];
+                    } else {
+                        // ตรวจสอบสินค้าใกล้หมด
+                        if (product.quantity < 5) {
+                            newStatuses.push(lowStockStatus);
+                        }
 
-                    // ตรวจสอบสินค้าใกล้หมด
-                    if (product.quantity < 5) {
-                        newStatuses.push(lowStockStatus);
-                    }
-
-                    // ตรวจสอบสินค้าใกล้หมดอายุ
-                    if (product.expirationDate <= sevenDaysFromNow) {
-                        newStatuses.push(expiringStatus);
+                        // ตรวจสอบสินค้าใกล้หมดอายุ (เฉพาะสินค้าที่ยังไม่หมดอายุ)
+                        if (product.expirationDate && product.expirationDate <= sevenDaysFromNow) {
+                            newStatuses.push(expiringStatus);
+                        }
                     }
                 }
             }
@@ -58,7 +64,6 @@ const updateProductStatus = async (req, res, next) => {
                 });
             }
         }
-
         next();
     } catch (error) {
         console.error('Error updating product status:', error);

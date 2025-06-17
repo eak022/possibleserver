@@ -10,6 +10,15 @@ const storage = new CloudinaryStorage({
   },
 });
 
-const upload = multer({ storage });
+const userStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "users", // ตั้งชื่อโฟลเดอร์สำหรับรูปโปรไฟล์
+    allowed_formats: ["jpg", "png", "jpeg"],
+  },
+});
 
-module.exports = upload;
+const upload = multer({ storage });
+const uploadUserImage = multer({ storage: userStorage });
+
+module.exports = { upload, uploadUserImage };

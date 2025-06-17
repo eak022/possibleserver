@@ -5,23 +5,26 @@ const StatusModel = require('../models/Status');
 exports.getAllNotifications = async (req, res) => {
     try {
         // ดึงสถานะที่ต้องการแจ้งเตือน
-        const [lowStockStatus, expiringStatus] = await Promise.all([
+        const [lowStockStatus, expiringStatus, expiredStatus] = await Promise.all([
             StatusModel.findOne({ statusName: 'สินค้าใกล้หมด' }),
-            StatusModel.findOne({ statusName: 'สินค้าใกล้หมดอายุ' })
+            StatusModel.findOne({ statusName: 'สินค้าใกล้หมดอายุ' }),
+            StatusModel.findOne({ statusName: 'หมดอายุ' })
         ]);
 
         // ดึงสินค้าทั้งหมดที่มีสถานะที่ต้องการแจ้งเตือน
         const products = await ProductModel.find({
             $or: [
                 { productStatuses: lowStockStatus._id },
-                { productStatuses: expiringStatus._id }
+                { productStatuses: expiringStatus._id },
+                { productStatuses: expiredStatus._id }
             ]
         }).populate('productStatuses');
 
         // จัดกลุ่มการแจ้งเตือน
         const notifications = {
             lowStock: [],
-            expiring: []
+            expiring: [],
+            expired: []
         };
 
         products.forEach(product => {
@@ -44,15 +47,25 @@ exports.getAllNotifications = async (req, res) => {
                         status: status.statusName,
                         statusColor: status.statusColor
                     });
+                } else if (status.statusName === 'หมดอายุ') {
+                    notifications.expired.push({
+                        productId: product._id,
+                        productName: product.productName,
+                        productImage: product.productImage,
+                        expirationDate: product.expirationDate,
+                        status: status.statusName,
+                        statusColor: status.statusColor
+                    });
                 }
             });
         });
 
         // นับจำนวนการแจ้งเตือนแต่ละประเภท
         const notificationCounts = {
-            total: notifications.lowStock.length + notifications.expiring.length,
+            total: notifications.lowStock.length + notifications.expiring.length + notifications.expired.length,
             lowStock: notifications.lowStock.length,
-            expiring: notifications.expiring.length
+            expiring: notifications.expiring.length,
+            expired: notifications.expired.length
         };
 
         res.json({

@@ -2,8 +2,12 @@ const StatusModel = require('../models/Status');
 
 const initializeStatuses = async () => {
     try {
-        // ลบข้อมูลเก่าทั้งหมดก่อน
-        await StatusModel.deleteMany({});
+        // ตรวจสอบว่ามีข้อมูลอยู่แล้วหรือไม่
+        const existingStatuses = await StatusModel.find();
+        if (existingStatuses.length > 0) {
+            console.log('Statuses already exist, skipping initialization');
+            return;
+        }
 
         const initialStatuses = [
             {
@@ -25,6 +29,10 @@ const initializeStatuses = async () => {
             {
                 statusName: 'เลิกขาย',
                 statusColor: '#9E9E9E'
+            },
+            {
+                statusName: 'หมดอายุ',
+                statusColor: '#F44336'
             }
         ];
 
@@ -51,6 +59,8 @@ const getStatusColor = (statusName) => {
             return 'bg-red-100 text-red-800';
         case 'เลิกขาย':
             return 'bg-gray-300 text-gray-700';
+        case 'หมดอายุ':
+            return 'bg-red-100 text-red-800';
         default:
             return 'bg-gray-100 text-gray-800';
     }

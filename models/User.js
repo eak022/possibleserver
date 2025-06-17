@@ -6,7 +6,8 @@ const UserSchema = new Schema({
   password: { type: String, required: true },
   phoneNumber: { type: String, default: null },
   address: { type: String, default: null },
-  shopName: { type: String, default: null }
+  shopName: { type: String, default: null },
+  profileImage: { type: String, default: null }
 }, { timestamps: true });
 
 const UserModel = model("User", UserSchema);

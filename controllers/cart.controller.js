@@ -15,7 +15,7 @@ exports.getAllCarts = async (req, res) => {
 
 // 📌 POST /carts - เพิ่มสินค้าไปยังตะกร้า
 exports.createCart = async (req, res) => {
-  const { productId, quantity, userName, pack } = req.body; // รับแค่ productId และข้อมูลที่จำเป็นเท่านั้น
+  const { productId, quantity, userName, pack } = req.body;
   console.log("Received data:", req.body);
 
   if (!productId || !quantity || !userName || pack === undefined) {
@@ -30,6 +30,14 @@ exports.createCart = async (req, res) => {
       return res.status(404).json({ message: "Product not found!" });
     }
 
+    // ตรวจสอบจำนวนสินค้าในสต็อก
+    const requestedQuantity = pack ? quantity * product.packSize : quantity;
+    if (requestedQuantity > product.quantity) {
+      return res.status(400).json({ 
+        message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าคงเหลือ ${product.quantity} ${pack ? 'แพ็ค' : 'ชิ้น'}`
+      });
+    }
+
     // กำหนดราคาตามว่า pack เป็น true หรือไม่
     const price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
 
@@ -37,6 +45,17 @@ exports.createCart = async (req, res) => {
     const existingItem = await CartModel.findOne({ productId, userName });
 
     if (existingItem) {
+      // ตรวจสอบจำนวนรวมที่จะมีในตะกร้า
+      const newTotalQuantity = pack ? 
+        (existingItem.quantity + quantity) * product.packSize : 
+        existingItem.quantity + quantity;
+
+      if (newTotalQuantity > product.quantity) {
+        return res.status(400).json({ 
+          message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าคงเหลือ ${product.quantity} ${pack ? 'แพ็ค' : 'ชิ้น'}`
+        });
+      }
+
       // ถ้าพบสินค้าในตะกร้าแล้ว ให้เพิ่มจำนวนสินค้า
       existingItem.quantity += quantity;
       const updatedItem = await existingItem.save();
@@ -46,9 +65,9 @@ exports.createCart = async (req, res) => {
     // ถ้าไม่พบสินค้าในตะกร้า ให้สร้างรายการใหม่
     const cart = new CartModel({
       productId,
-      name: product.productName,  // ใช้ชื่อสินค้า
-      price,                      // ใช้ราคาที่คำนวณจาก pack
-      image: product.productImage,  // ใช้รูปภาพสินค้า
+      name: product.productName,
+      price,
+      image: product.productImage,
       quantity,
       userName,
       pack
@@ -94,52 +113,63 @@ exports.deleteAllCarts = async (req, res) => {
   };
   
   exports.updateCartById = async (req, res) => {
-    const { quantity, pack } = req.body;
-  
-    console.log("Received quantity:", quantity);
-    console.log("Received pack:", pack);
-  
     try {
+      const { id } = req.params;
+      const { quantity, pack } = req.body;
+
+      // ตรวจสอบว่ามีการส่ง quantity หรือ pack มาหรือไม่
+      if (!quantity && pack === undefined) {
+        return res.status(400).json({ message: 'กรุณาระบุจำนวนหรือประเภทการขาย' });
+      }
+
       // ค้นหาสินค้าในตะกร้า
-      const cartItem = await CartModel.findById(req.params.id);
-  
-      if (!cartItem) {
-        return res.status(404).json({ message: "Item not found!" });
+      const cart = await CartModel.findById(id);
+      if (!cart) {
+        return res.status(404).json({ message: 'ไม่พบสินค้าในตะกร้า' });
       }
-  
-      // ค้นหาสินค้าจาก productId เพื่อดึงราคามาใช้
-      const product = await ProductModel.findById(cartItem.productId);
-  
+
+      // ค้นหาสินค้า
+      const product = await ProductModel.findById(cart.productId);
       if (!product) {
-        return res.status(404).json({ message: "Product not found!" });
+        return res.status(404).json({ message: 'ไม่พบสินค้า' });
       }
-  
-      // กำหนดราคาตามว่า pack เป็น true หรือไม่
-      let price = cartItem.price; // เก็บราคาปัจจุบันไว้ก่อน
+
+      // คำนวณจำนวนที่ต้องการ
+      let requestedQuantity = quantity;
       if (pack !== undefined) {
-        price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+        // ถ้าเปลี่ยนเป็นแพ็ค
+        if (pack) {
+          // คำนวณจำนวนชิ้นที่ต้องการจากจำนวนแพ็ค
+          requestedQuantity = quantity * product.packSize;
+        } else {
+          // ถ้าเปลี่ยนเป็นชิ้น
+          // คำนวณจำนวนชิ้นที่ต้องการจากจำนวนแพ็คเดิม
+          requestedQuantity = Math.ceil(quantity / product.packSize);
+        }
       }
-  
-      // อัปเดตเฉพาะถ้ามีการเปลี่ยนแปลง
-      if (quantity !== undefined && quantity !== null) {
-        // ถ้า quantity ถูกส่งมา อัปเดต quantity
-        cartItem.quantity = Number(quantity);
+
+      // ตรวจสอบจำนวนสินค้า
+      if (requestedQuantity > product.quantity) {
+        return res.status(400).json({ 
+          message: `ไม่สามารถอัพเดทสินค้าได้ จำนวนสินค้าคงเหลือ ${product.quantity} ${pack ? 'ชิ้น' : 'แพ็ค'}`
+        });
       }
-  
-      if (pack !== undefined) {
-        // ถ้า pack ถูกส่งมา อัปเดตราคา
-        cartItem.pack = pack;
-      }
-  
-      // อัปเดตราคาใหม่ถ้าจำเป็น
-      cartItem.price = price;
-  
-      // บันทึกการอัปเดต
-      const updatedItem = await cartItem.save();
-  
-      res.json(updatedItem);
+
+      // อัพเดทข้อมูล
+      const updateData = {};
+      if (quantity !== undefined) updateData.quantity = quantity;
+      if (pack !== undefined) updateData.pack = pack;
+
+      const updatedCart = await CartModel.findByIdAndUpdate(
+        id,
+        updateData,
+        { new: true }
+      ).populate('productId');
+
+      res.json(updatedCart);
     } catch (error) {
-      res.status(500).json({ message: error.message || "Failed to update cart item." });
+      console.error('Error updating cart:', error);
+      res.status(500).json({ message: 'เกิดข้อผิดพลาดในการอัพเดทตะกร้า' });
     }
   };
   
@@ -158,10 +188,9 @@ exports.deleteCartById = async (req, res) => {
   };
   
   exports.createCartWithBarcode = async (req, res) => {
-    const { barcode, quantity, userName, pack } = req.body; // รับแค่ barcode, quantity, userName, และ pack
+    const { barcode, quantity, userName, pack } = req.body;
     console.log("Received data:", req.body);
   
-    // ตรวจสอบข้อมูลที่ขาดหายไป
     if (!barcode || !quantity || !userName || pack === undefined) {
       return res.status(400).json({ message: "Product information is missing!" });
     }
@@ -176,12 +205,31 @@ exports.deleteCartById = async (req, res) => {
         return res.status(404).json({ message: "Product not found!" });
       }
 
+      // ตรวจสอบจำนวนสินค้าในสต็อก
+      const requestedQuantity = pack ? quantity * product.packSize : quantity;
+      if (requestedQuantity > product.quantity) {
+        return res.status(400).json({ 
+          message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าในสต็อกมีเพียง ${product.quantity} ${pack ? 'ชิ้น' : 'หน่วย'}`
+        });
+      }
+
       const price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
   
       // ค้นหาสินค้าในตะกร้าของผู้ใช้
       const existingItem = await CartModel.findOne({ productId: product._id, userName });
   
       if (existingItem) {
+        // ตรวจสอบจำนวนรวมที่จะมีในตะกร้า
+        const newTotalQuantity = pack ? 
+          (existingItem.quantity + quantity) * product.packSize : 
+          existingItem.quantity + quantity;
+
+        if (newTotalQuantity > product.quantity) {
+          return res.status(400).json({ 
+            message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าในสต็อกมีเพียง ${product.quantity} ${pack ? 'ชิ้น' : 'หน่วย'}`
+          });
+        }
+
         // ถ้าพบสินค้าในตะกร้าแล้ว เพิ่มจำนวนสินค้า
         existingItem.quantity += quantity;
         const updatedItem = await existingItem.save();
@@ -191,12 +239,12 @@ exports.deleteCartById = async (req, res) => {
       // ถ้าไม่พบสินค้าในตะกร้า สร้างรายการใหม่
       const cart = new CartModel({
         productId: product._id,
-        name: product.productName,  // ใช้ชื่อสินค้า
+        name: product.productName,
         price,
-        image: product.productImage,  // ใช้รูปภาพสินค้า
+        image: product.productImage,
         quantity,
         userName,
-        pack  // แพ็คหรือชิ้น
+        pack
       });
   
       const newItem = await cart.save();

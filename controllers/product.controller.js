@@ -32,6 +32,7 @@ exports.createProduct = async (req, res) => {
       return res.status(500).json({ message: error.message });
   }
 };
+
 // 📌 READ: ดึงสินค้าทั้งหมด
 exports.getAllProducts = async (req, res) => {
   try {
@@ -70,72 +71,88 @@ exports.getProductById = async (req, res) => {
   }
 };
 
-exports.updateProductById = async (req, res) => {
-  const { id } = req.params;
+// 📌 UPDATE: อัพเดทรูปภาพสินค้า
+exports.updateProductImage = async (req, res) => {
   try {
-    // ค้นหาสินค้าที่ต้องการอัพเดท
-    let product = await ProductModel.findById(id);
+    const { id } = req.params;
+    const product = await ProductModel.findById(id);
+
     if (!product) {
-      return res.status(404).send({ message: "ไม่พบสินค้า" });
+      return res.status(404).json({ message: "ไม่พบสินค้า" });
     }
 
-    // ถ้ามีการอัพโหลดรูปภาพใหม่
-    if (req.file) {
-      try {
-        // อัพโหลดรูปใหม่ไปยัง Cloudinary
-        const result = await cloudinary.uploader.upload(req.file.path, {
-          folder: "products"
-        });
-
-        // ลบรูปเก่าจาก Cloudinary ถ้ามี
-        if (product.productImage) {
-          const publicId = product.productImage.split('/').pop().split('.')[0];
-          await cloudinary.uploader.destroy(`products/${publicId}`);
-        }
-
-        // อัพเดทเฉพาะรูปภาพได
-        const updatedProduct = await ProductModel.findByIdAndUpdate(
-          id,
-          { productImage: result.secure_url },
-          { new: true }
-        ).populate("categoryId", "categoryName")
-         .populate("productStatuses", "statusName statusColor");
-
-        return res.json({
-          message: "อัพเดทรูปภาพสำเร็จ",
-          product: updatedProduct
-        });
-
-      } catch (error) {
-        console.log("Error uploading image:", error);
-        return res.status(500).send({ message: "เกิดข้อผิดพลาดในการอัพโหลดรูปภาพ" });
-      }
+    if (!req.file) {
+      return res.status(400).json({ message: "กรุณาอัพโหลดรูปภาพ" });
     }
 
-    // ถ้ามีการอัพเดทข้อมูลอื่นๆ (ไม่รวมรูปภาพ)
-    if (Object.keys(req.body).length > 0) {
-      const updatedProduct = await ProductModel.findByIdAndUpdate(
-        id,
-        req.body,
-        { new: true }
-      ).populate("categoryId", "categoryName")
-       .populate("productStatuses", "statusName statusColor");
-
-      return res.json({
-        message: "อัพเดทข้อมูลสำเร็จ",
-        product: updatedProduct
-      });
+    // ลบรูปเก่าจาก Cloudinary
+    if (product.productImage) {
+      const publicId = product.productImage.split('/').pop().split('.')[0];
+      await cloudinary.uploader.destroy(`products/${publicId}`);
     }
 
-    // ถ้าไม่มีการอัพเดทอะไรเลย
-    return res.status(400).send({ message: "กรุณาระบุข้อมูลที่ต้องการอัพเดท" });
+    // อัพเดทรูปภาพใหม่
+    const updatedProduct = await ProductModel.findByIdAndUpdate(
+      id,
+      { productImage: req.file.path },
+      { new: true }
+    ).populate("categoryId", "categoryName")
+     .populate("productStatuses", "statusName statusColor");
 
+    res.status(200).json({
+      message: "อัพเดทรูปภาพสำเร็จ",
+      product: updatedProduct
+    });
   } catch (error) {
-    console.log(error.message);
-    res.status(500).send({ message: "เกิดข้อผิดพลาดในการอัพเดทสินค้า" });
+    console.error("Error updating product image:", error);
+    res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัพเดทรูปภาพ" });
   }
 };
 
+// 📌 UPDATE: อัพเดทข้อมูลสินค้า
+exports.updateProductData = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = { ...req.body };
+
+    // ถ้ามีการอัพโหลดรูปภาพใหม่
+    if (req.file) {
+      const product = await ProductModel.findById(id);
+      if (!product) {
+        return res.status(404).json({ message: "ไม่พบสินค้า" });
+      }
+
+      // ลบรูปเก่าจาก Cloudinary ถ้ามี
+      if (product.productImage) {
+        const publicId = product.productImage.split('/').pop().split('.')[0];
+        await cloudinary.uploader.destroy(`products/${publicId}`);
+      }
+
+      updateData.productImage = req.file.path;
+    }
+
+    const updatedProduct = await ProductModel.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true }
+    ).populate("categoryId", "categoryName")
+     .populate("productStatuses", "statusName statusColor");
+
+    if (!updatedProduct) {
+      return res.status(404).json({ message: "ไม่พบสินค้า" });
+    }
+
+    res.status(200).json({
+      message: "อัพเดทข้อมูลสำเร็จ",
+      product: updatedProduct
+    });
+  } catch (error) {
+    console.error("Error updating product:", error);
+    res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัพเดทข้อมูล" });
+  }
+};
+
+// 📌 DELETE: ลบสินค้า
 exports.deleteProductById = async (req, res) => {
   const { id } = req.params;
 
@@ -160,7 +177,6 @@ exports.deleteProductById = async (req, res) => {
     res.status(500).send({ message: "Error occurred while deleting product." });
   }
 };
-
 
 // 📌 READ: ดึงสินค้าโดย barcodePack หรือ barcodeUnit
 exports.getProductByBarcode = async (req, res) => {
