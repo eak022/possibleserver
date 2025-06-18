@@ -1,6 +1,7 @@
 const OrderModel = require("../models/Order");
 const CartModel = require("../models/Cart");
 const ProductModel = require("../models/Product");
+const PromotionModel = require("../models/Promotion");
 
 exports.createOrder = async (req, res) => {
   try {
@@ -31,9 +32,11 @@ exports.createOrder = async (req, res) => {
       }
     }
 
-    // คำนวณราคาทั้งหมด
+    // คำนวณราคาทั้งหมดและโปรโมชั่น
     let subtotal = 0;
+    let totalDiscount = 0;
     const products = [];
+    const appliedPromotions = [];
     
     for (const item of cartItems) {
       const product = await ProductModel.findById(item.productId);
@@ -51,15 +54,44 @@ exports.createOrder = async (req, res) => {
         ? product.purchasePrice * product.packSize  // ถ้าเป็นแพ็ค คูณ packSize
         : product.purchasePrice; // ถ้าเป็นหน่วยเดียว ใช้ราคาปกติ
 
-      subtotal += item.price * item.quantity;
+      // ตรวจสอบโปรโมชั่นที่ใช้งานได้
+      const currentDate = new Date();
+      const activePromotion = await PromotionModel.findOne({
+        productId: item.productId,
+        validityStart: { $lte: currentDate },
+        validityEnd: { $gte: currentDate }
+      });
+
+      let finalPrice = item.price;
+      let itemDiscount = 0;
+
+      if (activePromotion) {
+        // ใช้ราคาโปรโมชั่น
+        finalPrice = activePromotion.discountedPrice;
+        itemDiscount = (item.price - activePromotion.discountedPrice) * item.quantity;
+        totalDiscount += itemDiscount;
+
+        // บันทึกโปรโมชั่นที่ใช้
+        appliedPromotions.push({
+          productId: activePromotion._id,
+          promotionName: activePromotion.promotionName,
+          discountedPrice: activePromotion.discountedPrice,
+          originalPrice: item.price,
+          discountAmount: itemDiscount
+        });
+      }
+
+      subtotal += finalPrice * item.quantity;
       products.push({
         productId: item.productId,
         image: item.image,
         productName: item.name,
         quantity: item.quantity,
-        purchasePrice: purchasePrice, // ✅ แก้ให้ใช้ราคาทุนแทน
-        sellingPricePerUnit: item.price,
+        purchasePrice: purchasePrice,
+        sellingPricePerUnit: finalPrice,
         pack: item.pack,
+        originalPrice: item.price,
+        discountAmount: itemDiscount
       });
 
       // ตัดสต็อกสินค้า
@@ -84,6 +116,7 @@ exports.createOrder = async (req, res) => {
       products,
       subtotal,
       total,
+      promotionId: appliedPromotions,
       paymentMethod,
       cash_received: paymentMethod === "Cash" ? cash_received : 0,
       change,
@@ -95,7 +128,12 @@ exports.createOrder = async (req, res) => {
     // ล้างตะกร้าหลังจากสั่งซื้อ
     await CartModel.deleteMany({ userName });
 
-    res.status(201).json({ message: "Order created successfully", order: newOrder });
+    res.status(201).json({ 
+      message: "Order created successfully", 
+      order: newOrder,
+      totalDiscount: totalDiscount,
+      appliedPromotions: appliedPromotions
+    });
   } catch (error) {
     console.error("Error creating order:", error);
     res.status(500).json({ message: "Internal Server Error" });

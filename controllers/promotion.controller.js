@@ -84,3 +84,38 @@ exports.deletePromotion = async (req, res) => {
     return res.status(500).json({ message: error.message || "Something went wrong while deleting promotion" });
   }
 };
+
+exports.getActivePromotions = async (req, res) => {
+  try {
+    const currentDate = new Date();
+    const promotions = await PromotionModel.find({
+      validityStart: { $lte: currentDate },
+      validityEnd: { $gte: currentDate }
+    }).populate("productId", "productName productImage sellingPricePerUnit sellingPricePerPack");
+    
+    return res.status(200).json({ promotions });
+  } catch (error) {
+    return res.status(500).json({ message: error.message || "Something went wrong while fetching active promotions" });
+  }
+};
+
+exports.getPromotionByProduct = async (req, res) => {
+  const { productId } = req.params;
+  
+  try {
+    const currentDate = new Date();
+    const promotion = await PromotionModel.findOne({
+      productId: productId,
+      validityStart: { $lte: currentDate },
+      validityEnd: { $gte: currentDate }
+    }).populate("productId", "productName productImage sellingPricePerUnit sellingPricePerPack");
+    
+    if (!promotion) {
+      return res.status(404).json({ message: "No active promotion found for this product" });
+    }
+    
+    return res.status(200).json({ promotion });
+  } catch (error) {
+    return res.status(500).json({ message: error.message || "Something went wrong while fetching promotion" });
+  }
+};
