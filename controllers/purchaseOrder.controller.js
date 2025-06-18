@@ -80,8 +80,12 @@ exports.createPurchaseOrder = async (req, res) => {
         return res.status(404).json({ message: `Product not found for ID: ${item.productId}` });
       }
 
+      // คำนวณราคาตามประเภทการขาย (แพ็คหรือชิ้น)
+      const purchasePrice = item.pack ? product.purchasePrice * product.packSize : product.purchasePrice;
+      const sellingPricePerUnit = item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+
       // คำนวณ subtotal ของแต่ละสินค้า
-      const subtotal = item.quantity * item.purchasePrice;
+      const subtotal = item.quantity * purchasePrice;
 
       // สะสม total
       total += subtotal;
@@ -91,11 +95,11 @@ exports.createPurchaseOrder = async (req, res) => {
         productId: item.productId,
         productName: product.productName,
         quantity: item.quantity,
-        purchasePrice: item.purchasePrice,
-        sellingPricePerUnit: item.sellingPricePerUnit,
+        purchasePrice: purchasePrice,
+        sellingPricePerUnit: sellingPricePerUnit,
         expirationDate: item.expirationDate,
         subtotal: subtotal,
-        pack: item.pack // เพิ่มฟิลด์ pack
+        pack: item.pack
       });
     }
 
@@ -128,7 +132,7 @@ exports.getAllPurchaseOrders = async (req, res) => {
 exports.updatePurchaseOrder = async (req, res) => {
   try {
     const purchaseOrderId = req.params.id;
-    const { products } = req.body;  // ดึงข้อมูลสินค้าใหม่จาก body
+    const { products, supplierId, purchaseOrderDate } = req.body;
 
     const existingPurchaseOrder = await PurchaseOrderModel.findById(purchaseOrderId);
     if (!existingPurchaseOrder) {
@@ -140,23 +144,57 @@ exports.updatePurchaseOrder = async (req, res) => {
       for (let oldItem of existingPurchaseOrder.products) {
         const product = await ProductModel.findById(oldItem.productId);
         if (product) {
-          product.quantity -= oldItem.quantity; // ลดจำนวนสินค้าที่เติมไปแล้ว
-          await product.save(); // บันทึกการเปลี่ยนแปลงลงในฐานข้อมูล
+          let quantityToRemove = oldItem.quantity;
+          if (oldItem.pack && product.packSize) {
+            quantityToRemove *= product.packSize;
+          }
+          product.quantity -= quantityToRemove;
+          await product.save();
         }
       }
     }
 
-    // อัปเดตเฉพาะสินค้าที่ต้องการแก้ไข
-    for (let updatedItem of products) {
-      const product = await ProductModel.findById(updatedItem.productId);
-      if (product) {
-        updatedItem.productName = product.productName;  // ดึงชื่อสินค้าจากฐานข้อมูล
-        // สามารถอัปเดตข้อมูลสินค้าอื่นๆ ที่ต้องการได้
+    let total = 0;
+    const updatedProducts = [];
+
+    // อัปเดตข้อมูลสินค้า
+    for (let item of products) {
+      const product = await ProductModel.findById(item.productId);
+      if (!product) {
+        return res.status(404).json({ message: `Product not found for ID: ${item.productId}` });
       }
+
+      // คำนวณราคาตามประเภทการขาย (แพ็คหรือชิ้น)
+      const purchasePrice = item.pack ? product.purchasePrice * product.packSize : product.purchasePrice;
+      const sellingPricePerUnit = item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+
+      // คำนวณ subtotal
+      const subtotal = item.quantity * purchasePrice;
+      total += subtotal;
+
+      updatedProducts.push({
+        productId: item.productId,
+        productName: product.productName,
+        quantity: item.quantity,
+        purchasePrice: purchasePrice,
+        sellingPricePerUnit: sellingPricePerUnit,
+        expirationDate: item.expirationDate,
+        subtotal: subtotal,
+        pack: item.pack
+      });
     }
 
     // อัปเดตใบสั่งซื้อ
-    const updatedPurchaseOrder = await PurchaseOrderModel.findByIdAndUpdate(purchaseOrderId, req.body, { new: true });
+    const updatedPurchaseOrder = await PurchaseOrderModel.findByIdAndUpdate(
+      purchaseOrderId,
+      {
+        supplierId,
+        purchaseOrderDate,
+        products: updatedProducts,
+        total
+      },
+      { new: true }
+    );
 
     if (!updatedPurchaseOrder) {
       return res.status(404).json({ message: "Purchase order not found" });
@@ -167,8 +205,12 @@ exports.updatePurchaseOrder = async (req, res) => {
       for (let newItem of updatedPurchaseOrder.products) {
         const product = await ProductModel.findById(newItem.productId);
         if (product) {
-          product.quantity += newItem.quantity; // เติมสต็อกใหม่ตามที่อัปเดต
-          await product.save(); // บันทึกการเปลี่ยนแปลงลงในฐานข้อมูล
+          let quantityToAdd = newItem.quantity;
+          if (newItem.pack && product.packSize) {
+            quantityToAdd *= product.packSize;
+          }
+          product.quantity += quantityToAdd;
+          await product.save();
         }
       }
     }

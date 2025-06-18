@@ -158,7 +158,11 @@ exports.deleteAllCarts = async (req, res) => {
       // อัพเดทข้อมูล
       const updateData = {};
       if (quantity !== undefined) updateData.quantity = quantity;
-      if (pack !== undefined) updateData.pack = pack;
+      if (pack !== undefined) {
+        updateData.pack = pack;
+        // อัพเดทราคาตามประเภทการขาย
+        updateData.price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+      }
 
       const updatedCart = await CartModel.findByIdAndUpdate(
         id,
@@ -188,10 +192,10 @@ exports.deleteCartById = async (req, res) => {
   };
   
   exports.createCartWithBarcode = async (req, res) => {
-    const { barcode, quantity, userName, pack } = req.body;
+    const { barcode, quantity, userName } = req.body;
     console.log("Received data:", req.body);
   
-    if (!barcode || !quantity || !userName || pack === undefined) {
+    if (!barcode || !quantity || !userName) {
       return res.status(400).json({ message: "Product information is missing!" });
     }
   
@@ -204,6 +208,10 @@ exports.deleteCartById = async (req, res) => {
       if (!product) {
         return res.status(404).json({ message: "Product not found!" });
       }
+
+      // ตรวจสอบว่า barcode ตรงกับ barcodePack หรือ barcodeUnit
+      const isPack = barcode === product.barcodePack;
+      const pack = isPack;
 
       // ตรวจสอบจำนวนสินค้าในสต็อก
       const requestedQuantity = pack ? quantity * product.packSize : quantity;
