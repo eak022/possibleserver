@@ -10,6 +10,36 @@ exports.createProduct = async (req, res) => {
           return res.status(400).json({ message: "Please upload a product image" });
       }
 
+      // ตรวจสอบชื่อซ้ำ
+      const nameExists = await ProductModel.findOne({ productName });
+      if (nameExists) {
+        return res.status(400).json({ message: "มีสินค้าชื่อนี้อยู่ในระบบแล้ว" });
+      }
+      // ตรวจสอบ barcodePack ซ้ำกับ barcodePack หรือ barcodeUnit ของสินค้าอื่น
+      if (barcodePack) {
+        const barcodePackExists = await ProductModel.findOne({
+          $or: [
+            { barcodePack },
+            { barcodeUnit: barcodePack }
+          ]
+        });
+        if (barcodePackExists) {
+          return res.status(400).json({ message: "Barcode แพ็คนี้ถูกใช้ไปแล้ว (อาจซ้ำกับ barcode แพ็คหรือ barcode หน่วยของสินค้าอื่น)" });
+        }
+      }
+      // ตรวจสอบ barcodeUnit ซ้ำกับ barcodePack หรือ barcodeUnit ของสินค้าอื่น
+      if (barcodeUnit) {
+        const barcodeUnitExists = await ProductModel.findOne({
+          $or: [
+            { barcodePack: barcodeUnit },
+            { barcodeUnit: barcodeUnit }
+          ]
+        });
+        if (barcodeUnitExists) {
+          return res.status(400).json({ message: "Barcode หน่วยนี้ถูกใช้ไปแล้ว (อาจซ้ำกับ barcode แพ็คหรือ barcode หน่วยของสินค้าอื่น)" });
+        }
+      }
+
       const newProduct = new ProductModel({
           productName,
           productDescription,
@@ -29,6 +59,10 @@ exports.createProduct = async (req, res) => {
       await newProduct.save();
       return res.status(201).json({ message: "Product created successfully", product: newProduct });
   } catch (error) {
+      // handle duplicate key error (MongoDB)
+      if (error.code === 11000) {
+        return res.status(400).json({ message: "ข้อมูลซ้ำในระบบ (ชื่อหรือบาร์โค้ด)" });
+      }
       return res.status(500).json({ message: error.message });
   }
 };
@@ -115,6 +149,40 @@ exports.updateProductData = async (req, res) => {
     const { id } = req.params;
     const updateData = { ...req.body };
 
+    // ตรวจสอบชื่อซ้ำ (ยกเว้นตัวเอง)
+    if (updateData.productName) {
+      const nameExists = await ProductModel.findOne({ productName: updateData.productName, _id: { $ne: id } });
+      if (nameExists) {
+        return res.status(400).json({ message: "มีสินค้าชื่อนี้อยู่ในระบบแล้ว" });
+      }
+    }
+    // ตรวจสอบ barcodePack ซ้ำกับ barcodePack หรือ barcodeUnit ของสินค้าอื่น (ยกเว้นตัวเอง)
+    if (updateData.barcodePack) {
+      const barcodePackExists = await ProductModel.findOne({
+        $or: [
+          { barcodePack: updateData.barcodePack },
+          { barcodeUnit: updateData.barcodePack }
+        ],
+        _id: { $ne: id }
+      });
+      if (barcodePackExists) {
+        return res.status(400).json({ message: "Barcode แพ็คนี้ถูกใช้ไปแล้ว (อาจซ้ำกับ barcode แพ็คหรือ barcode หน่วยของสินค้าอื่น)" });
+      }
+    }
+    // ตรวจสอบ barcodeUnit ซ้ำกับ barcodePack หรือ barcodeUnit ของสินค้าอื่น (ยกเว้นตัวเอง)
+    if (updateData.barcodeUnit) {
+      const barcodeUnitExists = await ProductModel.findOne({
+        $or: [
+          { barcodePack: updateData.barcodeUnit },
+          { barcodeUnit: updateData.barcodeUnit }
+        ],
+        _id: { $ne: id }
+      });
+      if (barcodeUnitExists) {
+        return res.status(400).json({ message: "Barcode หน่วยนี้ถูกใช้ไปแล้ว (อาจซ้ำกับ barcode แพ็คหรือ barcode หน่วยของสินค้าอื่น)" });
+      }
+    }
+
     // ถ้ามีการอัพโหลดรูปภาพใหม่
     if (req.file) {
       const product = await ProductModel.findById(id);
@@ -147,6 +215,9 @@ exports.updateProductData = async (req, res) => {
       product: updatedProduct
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ message: "ข้อมูลซ้ำในระบบ (ชื่อหรือบาร์โค้ด)" });
+    }
     console.error("Error updating product:", error);
     res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัพเดทข้อมูล" });
   }

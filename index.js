@@ -20,6 +20,7 @@ const statusRouter  = require("./routes/status.router");
 const notificationRouter = require('./routes/notification.router');
 const swaggerSetup = require('./docs/swagger');
 const { initializeStatuses } = require('./config/initialData');
+const authenticateToken = require("./middlewares/authJwt.middleware");
 
 try {
   mongoose.connect(DB_URL);
@@ -54,6 +55,8 @@ app.get("/", (req, res) => {
   res.send("<h1>Welcom to SE NPRU Blog resfull api</h1>");
 });
 
+app.use("/api/v1/auth", userRouter);
+app.use(authenticateToken);
 app.use("/api/v1/cart", cartRouter);
 app.use("/api/v1/category", categoryRouter);
 app.use("/api/v1/order", orderRouter);
@@ -62,7 +65,6 @@ app.use("/api/v1/promotion", promotionRouter);
 app.use("/api/v1/status", statusRouter);
 app.use("/api/v1/purchase-orders", purchaseOrderRouter);
 app.use("/api/v1/supplier", supplierRouter);
-app.use("/api/v1/auth", userRouter);
 app.use('/api/v1/notifications', notificationRouter);
 
 app.listen(PORT, () => {
