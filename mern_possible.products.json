@@ -1,0 +1,743 @@
+[{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc14e"
+  },
+  "productName": "เลย์ รสโนริสาหร่าย 50 กรัม",
+  "productDescription": "มันฝรั่งทอดกรอบ เลย์ รสโนริสาหร่าย ขนาด 50 กรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445260/products/wlmznyc5xhhcigdk1mxb.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc13f"
+  },
+  "packSize": 12,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850718801234",
+  "barcodeUnit": "8850718801235",
+  "quantity": 80,
+  "purchasePrice": 18,
+  "sellingPricePerUnit": 25,
+  "sellingPricePerPack": 288,
+  "expirationDate": {
+    "$date": "2025-07-26T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T19:14:59.273Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc14f"
+  },
+  "productName": "มาม่า รสต้มยำกุ้ง 55 กรัม",
+  "productDescription": "บะหมี่กึ่งสำเร็จรูป มาม่า รสต้มยำกุ้ง ขนาด 55 กรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445278/products/ealkm8qlttkbc9vuwymp.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc140"
+  },
+  "packSize": 10,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850987101234",
+  "barcodeUnit": "8850987101235",
+  "quantity": 200,
+  "purchasePrice": 5,
+  "sellingPricePerUnit": 7,
+  "sellingPricePerPack": 65,
+  "expirationDate": {
+    "$date": "2026-01-10T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:47:58.810Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc150"
+  },
+  "productName": "ไข่ไก่ เบอร์ 2",
+  "productDescription": "ไข่ไก่สด เบอร์ 2 แพ็ค 10 ฟอง",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445292/products/tedxc6fsttavfqk08uvz.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc141"
+  },
+  "packSize": 10,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    },
+    {
+      "$oid": "6851990e27704725c86ea5b8"
+    }
+  ],
+  "barcodePack": "8850123401234",
+  "barcodeUnit": "8850123401235",
+  "quantity": 59,
+  "purchasePrice": 32,
+  "sellingPricePerUnit": 4,
+  "sellingPricePerPack": 40,
+  "expirationDate": {
+    "$date": "2025-06-24T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T19:26:19.906Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc151"
+  },
+  "productName": "ถุงขยะดำ 24x28 นิ้ว",
+  "productDescription": "ถุงขยะดำ ขนาด 24x28 นิ้ว 1 แพ็ค 10 ใบ",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445304/products/x3lbemoorawowtkhh16v.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc142"
+  },
+  "packSize": 10,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8851234501234",
+  "barcodeUnit": "8851234501235",
+  "quantity": 49,
+  "purchasePrice": 25,
+  "sellingPricePerUnit": 3,
+  "sellingPricePerPack": 30,
+  "expirationDate": {
+    "$date": "2026-01-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T19:18:32.632Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc152"
+  },
+  "productName": "แชมพูซันซิลสีชมพู 320 มล.",
+  "productDescription": "แชมพูซันซิล สูตรผมนุ่มลื่น ขนาด 320 มล.",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445315/products/aze2o3m5tti9hjbqozrc.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc143"
+  },
+  "packSize": 1,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8851932391234",
+  "barcodeUnit": "8851932391235",
+  "quantity": 40,
+  "purchasePrice": 65,
+  "sellingPricePerUnit": 79,
+  "sellingPricePerPack": 79,
+  "expirationDate": {
+    "$date": "2026-01-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:48:35.413Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc153"
+  },
+  "productName": "น้ำปลาแท้ตราปลาหมึก 700 มล.",
+  "productDescription": "น้ำปลาแท้ตราปลาหมึก ขนาด 700 มล.",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445336/products/g4ebybal67u0bqyh7huy.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc144"
+  },
+  "packSize": 1,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850123456789",
+  "barcodeUnit": "8850123456790",
+  "quantity": 30,
+  "purchasePrice": 18,
+  "sellingPricePerUnit": 22,
+  "sellingPricePerPack": 22,
+  "expirationDate": {
+    "$date": "2026-01-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:48:57.079Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc154"
+  },
+  "productName": "นมโฟร์โมสต์ รสจืด 225 มล.",
+  "productDescription": "นมยูเอชที โฟร์โมสต์ รสจืด 225 มล.",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445349/products/c1vvvzqynjpnm9jibmu2.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc145"
+  },
+  "packSize": 6,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    },
+    {
+      "$oid": "6851990e27704725c86ea5b6"
+    }
+  ],
+  "barcodePack": "8850123498765",
+  "barcodeUnit": "8850123498766",
+  "quantity": 1,
+  "purchasePrice": 10,
+  "sellingPricePerUnit": 13,
+  "sellingPricePerPack": 75,
+  "expirationDate": {
+    "$date": "2025-12-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T19:20:22.336Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc155"
+  },
+  "productName": "ข้าวหอมมะลิ ตราฉัตร 5 กก.",
+  "productDescription": "ข้าวหอมมะลิ ตราฉัตร ขนาด 5 กิโลกรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445375/products/plyiehke7lkea8w3qnqb.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc146"
+  },
+  "packSize": 1,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850123412345",
+  "barcodeUnit": "8850123412346",
+  "quantity": 24,
+  "purchasePrice": 140,
+  "sellingPricePerUnit": 155,
+  "sellingPricePerPack": 155,
+  "expirationDate": {
+    "$date": "2026-01-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T19:18:32.635Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc156"
+  },
+  "productName": "ปลากระป๋องสามแม่ครัว 155 กรัม",
+  "productDescription": "ปลาซาร์ดีนในซอสมะเขือเทศ สามแม่ครัว 155 กรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445387/products/gsojtbp971btuibhaej4.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc147"
+  },
+  "packSize": 1,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850123476543",
+  "barcodeUnit": "8850123476544",
+  "quantity": 70,
+  "purchasePrice": 18,
+  "sellingPricePerUnit": 22,
+  "sellingPricePerPack": 22,
+  "expirationDate": {
+    "$date": "2026-01-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:49:47.603Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc158"
+  },
+  "productName": "โออิชิ กรีนที 380 มล.",
+  "productDescription": "ชาเขียวโออิชิ กรีนที ขนาด 380 มล.",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445421/products/e94n2l7mijqsygdewqs0.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc13e"
+  },
+  "packSize": 6,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8851959123460",
+  "barcodeUnit": "8851959123461",
+  "quantity": 90,
+  "purchasePrice": 18,
+  "sellingPricePerUnit": 22,
+  "sellingPricePerPack": 130,
+  "expirationDate": {
+    "$date": "2025-10-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:50:21.842Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc159"
+  },
+  "productName": "สแน็คแจ๊ค 27 กรัม",
+  "productDescription": "ขนมถั่วลันเตาอบกรอบ สแน็คแจ๊ค 27 กรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445435/products/mnvxacxtw1s6i1b0swci.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc13f"
+  },
+  "packSize": 12,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    },
+    {
+      "$oid": "6851990e27704725c86ea5b8"
+    }
+  ],
+  "barcodePack": "8850718801236",
+  "barcodeUnit": "8850718801237",
+  "quantity": 60,
+  "purchasePrice": 10,
+  "sellingPricePerUnit": 15,
+  "sellingPricePerPack": 150,
+  "expirationDate": {
+    "$date": "2025-06-27T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T19:16:10.082Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc15a"
+  },
+  "productName": "ทิวลี่เวเฟอร์ รสช็อกโกแลต 36 กรัม",
+  "productDescription": "เวเฟอร์สอดไส้ช็อกโกแลต ทิวลี่ 36 กรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445453/products/hwvsd7wnu11iqgtyiosg.png",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc13f"
+  },
+  "packSize": 12,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    },
+    {
+      "$oid": "6851990e27704725c86ea5b8"
+    }
+  ],
+  "barcodePack": "8850718801238",
+  "barcodeUnit": "8850718801239",
+  "quantity": 70,
+  "purchasePrice": 12,
+  "sellingPricePerUnit": 17,
+  "sellingPricePerPack": 180,
+  "expirationDate": {
+    "$date": "2025-06-24T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T19:16:18.413Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc15b"
+  },
+  "productName": "ไวไว รสหมูสับ 60 กรัม",
+  "productDescription": "บะหมี่กึ่งสำเร็จรูป ไวไว รสหมูสับ 60 กรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445489/products/a22xupe03bpznxvvv7xk.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc140"
+  },
+  "packSize": 10,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850987101236",
+  "barcodeUnit": "8850987101237",
+  "quantity": 150,
+  "purchasePrice": 5,
+  "sellingPricePerUnit": 7,
+  "sellingPricePerPack": 65,
+  "expirationDate": {
+    "$date": "2026-01-10T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:51:29.433Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc15c"
+  },
+  "productName": "ไวตามิ้ลค์ 300 มล.",
+  "productDescription": "นมถั่วเหลืองไวตามิ้ลค์ ขนาด 300 มล.",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445584/products/udyvnr1ncoojvnbjzqif.png",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc145"
+  },
+  "packSize": 6,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850123498767",
+  "barcodeUnit": "8850123498768",
+  "quantity": 80,
+  "purchasePrice": 12,
+  "sellingPricePerUnit": 15,
+  "sellingPricePerPack": 90,
+  "expirationDate": {
+    "$date": "2025-12-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:53:04.420Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc15d"
+  },
+  "productName": "น้ำมันพืชองุ่น 1 ลิตร",
+  "productDescription": "น้ำมันพืชองุ่น ขนาด 1 ลิตร",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445515/products/xdsbqu2v3pmderroxepe.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc144"
+  },
+  "packSize": 1,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850123456791",
+  "barcodeUnit": "8850123456792",
+  "quantity": 40,
+  "purchasePrice": 45,
+  "sellingPricePerUnit": 52,
+  "sellingPricePerPack": 52,
+  "expirationDate": {
+    "$date": "2026-01-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:51:56.138Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc15e"
+  },
+  "productName": "น้ำตาลทรายขาว 1 กก.",
+  "productDescription": "น้ำตาลทรายขาว ตรามิตรผล ขนาด 1 กิโลกรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445549/products/k2ytwfkvkhtpptrhzv6l.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc146"
+  },
+  "packSize": 1,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850123412347",
+  "barcodeUnit": "8850123412348",
+  "quantity": 60,
+  "purchasePrice": 22,
+  "sellingPricePerUnit": 28,
+  "sellingPricePerPack": 28,
+  "expirationDate": {
+    "$date": "2026-01-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:52:29.751Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc15f"
+  },
+  "productName": "ปลากระป๋องโรซ่า 155 กรัม",
+  "productDescription": "ปลาซาร์ดีนในซอสมะเขือเทศ โรซ่า 155 กรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445530/products/mlkqxg9b3isowtzlkwy6.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc147"
+  },
+  "packSize": 1,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850123476545",
+  "barcodeUnit": "8850123476546",
+  "quantity": 60,
+  "purchasePrice": 18,
+  "sellingPricePerUnit": 22,
+  "sellingPricePerPack": 22,
+  "expirationDate": {
+    "$date": "2026-01-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:52:11.800Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc160"
+  },
+  "productName": "น้ำดื่มคริสตัล 600 มล.",
+  "productDescription": "น้ำดื่มบรรจุขวด คริสตัล 600 มล.",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445602/products/s7lq3lewbbyghk0g4qun.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc13e"
+  },
+  "packSize": 12,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8851959123462",
+  "barcodeUnit": "8851959123463",
+  "quantity": 120,
+  "purchasePrice": 7,
+  "sellingPricePerUnit": 10,
+  "sellingPricePerPack": 110,
+  "expirationDate": {
+    "$date": "2025-10-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:53:22.704Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc164"
+  },
+  "productName": "น้ำยาล้างจานซันไลต์ 500 มล.",
+  "productDescription": "น้ำยาล้างจานซันไลต์ ขนาด 500 มล.",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445838/products/cprcd86ym00mmo1o9mai.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc142"
+  },
+  "packSize": 1,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8851234501236",
+  "barcodeUnit": "8851234501237",
+  "quantity": 50,
+  "purchasePrice": 22,
+  "sellingPricePerUnit": 28,
+  "sellingPricePerPack": 28,
+  "expirationDate": {
+    "$date": "2026-01-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:57:18.366Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc166"
+  },
+  "productName": "ซอสหอยนางรมแม็กกี้ 600 กรัม",
+  "productDescription": "ซอสหอยนางรมแม็กกี้ ขนาด 600 กรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445933/products/k7odjewljngtkuemyhro.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc144"
+  },
+  "packSize": 1,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850123456793",
+  "barcodeUnit": "8850123456794",
+  "quantity": 30,
+  "purchasePrice": 25,
+  "sellingPricePerUnit": 32,
+  "sellingPricePerPack": 32,
+  "expirationDate": {
+    "$date": "2026-01-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T18:58:53.725Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc167"
+  },
+  "productName": "โยเกิร์ตดัชชี่ 135 กรัม",
+  "productDescription": "โยเกิร์ตดัชชี่ ขนาด 135 กรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750445978/products/qlejnrf7ckk13cxsxwhp.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc145"
+  },
+  "packSize": 4,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    },
+    {
+      "$oid": "6851990e27704725c86ea5b8"
+    }
+  ],
+  "barcodePack": "8850123498769",
+  "barcodeUnit": "8850123498770",
+  "quantity": 40,
+  "purchasePrice": 13,
+  "sellingPricePerUnit": 17,
+  "sellingPricePerPack": 68,
+  "expirationDate": {
+    "$date": "2025-06-27T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T19:16:40.148Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc168"
+  },
+  "productName": "ข้าวกล้องหอมมะลิ 1 กก.",
+  "productDescription": "ข้าวกล้องหอมมะลิ ขนาด 1 กิโลกรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750446012/products/ep9bjtdcab4jvjfoplhf.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc146"
+  },
+  "packSize": 1,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850123412349",
+  "barcodeUnit": "8850123412350",
+  "quantity": 30,
+  "purchasePrice": 38,
+  "sellingPricePerUnit": 45,
+  "sellingPricePerPack": 45,
+  "expirationDate": {
+    "$date": "2026-01-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T19:00:12.078Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc169"
+  },
+  "productName": "ข้าวโพดหวานกระป๋อง 425 กรัม",
+  "productDescription": "ข้าวโพดหวานกระป๋อง 425 กรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750446045/products/oifn3gjy0pabngpwfowh.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc147"
+  },
+  "packSize": 1,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8850123476547",
+  "barcodeUnit": "8850123476548",
+  "quantity": 40,
+  "purchasePrice": 22,
+  "sellingPricePerUnit": 28,
+  "sellingPricePerPack": 28,
+  "expirationDate": {
+    "$date": "2026-01-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T19:00:45.918Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc16a"
+  },
+  "productName": "น้ำดื่มสิงห์ 600 มล.",
+  "productDescription": "น้ำดื่มบรรจุขวด สิงห์ 600 มล.",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750446100/products/lnwgktraw8tbymzlisgw.jpg",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc13e"
+  },
+  "packSize": 12,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    }
+  ],
+  "barcodePack": "8851959123466",
+  "barcodeUnit": "8851959123467",
+  "quantity": 100,
+  "purchasePrice": 7,
+  "sellingPricePerUnit": 10,
+  "sellingPricePerPack": 110,
+  "expirationDate": {
+    "$date": "2025-10-01T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T19:01:40.949Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "6855aa22c16f3c50f07fc16b"
+  },
+  "productName": "ขนมปังฟาร์มเฮ้าส์โฮลวีท 65 กรัม",
+  "productDescription": "ขนมปังโฮลวีท ฟาร์มเฮ้าส์ 65 กรัม",
+  "productImage": "https://res.cloudinary.com/dj7ajpicx/image/upload/v1750446154/products/ahj2sxfstf9zyrcafaa8.png",
+  "categoryId": {
+    "$oid": "6855a82ec16f3c50f07fc140"
+  },
+  "packSize": 6,
+  "productStatuses": [
+    {
+      "$oid": "6851990e27704725c86ea5b2"
+    },
+    {
+      "$oid": "6851990e27704725c86ea5b8"
+    }
+  ],
+  "barcodePack": "8850987101240",
+  "barcodeUnit": "8850987101241",
+  "quantity": 40,
+  "purchasePrice": 14,
+  "sellingPricePerUnit": 18,
+  "sellingPricePerPack": 108,
+  "expirationDate": {
+    "$date": "2025-06-25T00:00:00.000Z"
+  },
+  "updatedAt": {
+    "$date": "2025-06-20T19:16:52.731Z"
+  }
+}]

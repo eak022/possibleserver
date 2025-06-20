@@ -1,0 +1,60 @@
+[{
+  "_id": {
+    "$oid": "6855a82ec16f3c50f07fc13e"
+  },
+  "categoryName": "เครื่องดื่ม"
+},
+{
+  "_id": {
+    "$oid": "6855a82ec16f3c50f07fc13f"
+  },
+  "categoryName": "ขนมขบเคี้ยว"
+},
+{
+  "_id": {
+    "$oid": "6855a82ec16f3c50f07fc140"
+  },
+  "categoryName": "อาหารแห้ง"
+},
+{
+  "_id": {
+    "$oid": "6855a82ec16f3c50f07fc141"
+  },
+  "categoryName": "อาหารสด"
+},
+{
+  "_id": {
+    "$oid": "6855a82ec16f3c50f07fc142"
+  },
+  "categoryName": "ของใช้ในบ้าน"
+},
+{
+  "_id": {
+    "$oid": "6855a82ec16f3c50f07fc143"
+  },
+  "categoryName": "ของใช้ส่วนตัว"
+},
+{
+  "_id": {
+    "$oid": "6855a82ec16f3c50f07fc144"
+  },
+  "categoryName": "เครื่องปรุงรส"
+},
+{
+  "_id": {
+    "$oid": "6855a82ec16f3c50f07fc145"
+  },
+  "categoryName": "ผลิตภัณฑ์นม"
+},
+{
+  "_id": {
+    "$oid": "6855a82ec16f3c50f07fc146"
+  },
+  "categoryName": "ข้าวสาร/ธัญพืช"
+},
+{
+  "_id": {
+    "$oid": "6855a82ec16f3c50f07fc147"
+  },
+  "categoryName": "อาหารกระป๋อง"
+}]
