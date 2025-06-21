@@ -8,6 +8,11 @@ exports.createCategory = async (req, res) => {
     }
   
     try {
+      const existingCategory = await CategoryModel.findOne({ categoryName });
+      if (existingCategory) {
+        return res.status(400).json({ message: "A category with this name already exists." });
+      }
+
       const newCategory = await CategoryModel.create({ categoryName });
       return res.status(201).json({ message: "Category created successfully", category: newCategory });
     } catch (error) {
@@ -43,6 +48,13 @@ exports.updateCategory = async (req, res) => {
     const { categoryName } = req.body;  // ไม่มี categoryId แล้ว
   
     try {
+      if (categoryName) {
+        const existingCategory = await CategoryModel.findOne({ categoryName: categoryName });
+        if (existingCategory && existingCategory._id.toString() !== id) {
+          return res.status(400).json({ message: "A category with this name already exists." });
+        }
+      }
+
       const category = await CategoryModel.findById(id);
       if (!category) {
         return res.status(404).json({ message: "Category not found" });

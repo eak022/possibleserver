@@ -8,6 +8,11 @@ exports.createSupplier = async (req, res) => {
   }
 
   try {
+    const existingSupplier = await SupplierModel.findOne({ companyName });
+    if (existingSupplier) {
+      return res.status(400).json({ message: "A supplier with this company name already exists." });
+    }
+
     const supplier = await SupplierModel.create({ companyName, sellerName, address, phoneNumber });
     return res.status(201).json({ message: "Supplier created successfully", supplier });
   } catch (error) {
@@ -21,6 +26,13 @@ exports.updateSupplierInfo = async (req, res) => {
   const { companyName, sellerName, address, phoneNumber } = req.body;
 
   try {
+    if (companyName) {
+      const existingSupplier = await SupplierModel.findOne({ companyName: companyName });
+      if (existingSupplier && existingSupplier._id.toString() !== id) {
+        return res.status(400).json({ message: "A supplier with this company name already exists." });
+      }
+    }
+
     const supplier = await SupplierModel.findById(id);
     if (!supplier) {
       return res.status(404).json({ message: "Supplier not found" });

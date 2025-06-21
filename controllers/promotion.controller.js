@@ -23,12 +23,13 @@ exports.createPromotion = async (req, res) => {
 };
 
 exports.getAllPromotions = async (req, res) => {
-    try {
-      const promotions = await PromotionModel.find().populate("productId", "productName");  // populate ด้วย _id ของ Product
-      return res.status(200).json({ promotions });
-    } catch (error) {
-      return res.status(500).json({ message: error.message || "Something went wrong while fetching promotions" });
-    }
+  try {
+    //เพิ่มsellingPricePerUnitลงในpopulate
+    const promotions = await PromotionModel.find().populate("productId", "productName sellingPricePerUnit");  // populate ด้วย _id ของ Product
+    return res.status(200).json({ promotions });
+  } catch (error) {
+    return res.status(500).json({ message: error.message || "Something went wrong while fetching promotions" });
+  }
 };
 
 exports.getPromotionById = async (req, res) => {
@@ -111,7 +112,7 @@ exports.getPromotionByProduct = async (req, res) => {
     }).populate("productId", "productName productImage sellingPricePerUnit sellingPricePerPack");
     
     if (!promotion) {
-      return res.status(404).json({ message: "No active promotion found for this product" });
+      return res.status(200).json({ promotion: null });
     }
     
     return res.status(200).json({ promotion });

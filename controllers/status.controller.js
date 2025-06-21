@@ -8,7 +8,11 @@ exports.createStatus = async (req, res) => {
     }
   
     try {
-      // ไม่ต้องเช็ค statusId อีกต่อไป เพราะ MongoDB จะสร้าง _id ให้เอง
+      const existingStatus = await StatusModel.findOne({ statusName });
+      if (existingStatus) {
+        return res.status(400).json({ message: "A status with this name already exists." });
+      }
+
       const newStatus = await StatusModel.create({ statusName });
       return res.status(201).json({ message: "Status created successfully", status: newStatus });
     } catch (error) {
@@ -44,6 +48,13 @@ exports.updateStatus = async (req, res) => {
     const { statusName } = req.body;
   
     try {
+      if (statusName) {
+        const existingStatus = await StatusModel.findOne({ statusName: statusName });
+        if (existingStatus && existingStatus._id.toString() !== id) {
+          return res.status(400).json({ message: "A status with this name already exists." });
+        }
+      }
+
       const status = await StatusModel.findById(id);
       if (!status) {
         return res.status(404).json({ message: "Status not found" });
