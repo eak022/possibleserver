@@ -139,6 +139,7 @@ exports.createOrder = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
 exports.getOrders = async (req, res) => {
   try {
     const orders = await OrderModel.find().sort({ createdAt: -1 });
@@ -182,6 +183,7 @@ exports.deleteOrder = async (req, res) => {
     res.status(500).json({ message: "Error deleting order", error });
   }
 };
+
 exports.updateOrderDetail = async (req, res) => {
   try {
     const { productId, quantity, sellingPricePerUnit, pack } = req.body;
@@ -255,7 +257,7 @@ exports.updateOrderStatus = async (req, res) => {
     }
 
     // ตรวจสอบว่าสถานะใหม่เป็นค่าที่ถูกต้อง
-    const validStatuses = ["ขายสำเร็จ", "ยกเลิก", "คืนสินค้า", "ทิ้ง"];
+    const validStatuses = ["ขายสำเร็จ", "ยกเลิก", "คืนสินค้า", "ตัดจำหน่าย"];
     if (!validStatuses.includes(orderStatus)) {
       return res.status(400).json({ 
         message: "สถานะไม่ถูกต้อง", 
@@ -291,5 +293,55 @@ exports.updateOrderStatus = async (req, res) => {
   } catch (error) {
     console.error("Error updating order status:", error);
     res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัพเดทสถานะ" });
+  }
+};
+
+exports.createDisposeOrder = async (req, res) => {
+  try {
+    const { userName, products, orderStatus, paymentMethod, subtotal, total } = req.body;
+    if (!userName || !products || !Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });
+    }
+    // ตรวจสอบว่าสินค้าทุกตัวมี productId และ quantity
+    let calculatedSubtotal = 0;
+    let calculatedProducts = [];
+    for (const item of products) {
+      if (!item.productId || !item.quantity) {
+        return res.status(400).json({ message: "ข้อมูลสินค้าไม่ครบถ้วน" });
+      }
+      // ดึงราคาต้นทุนล่าสุด
+      const product = await ProductModel.findById(item.productId);
+      if (!product) {
+        return res.status(404).json({ message: "ไม่พบสินค้าในระบบ" });
+      }
+      const purchasePrice = product.purchasePrice;
+      const productTotal = purchasePrice * item.quantity;
+      calculatedSubtotal += productTotal;
+      // ตัดสต็อกสินค้าให้เหลือ 0
+      await ProductModel.findByIdAndUpdate(item.productId, {
+        quantity: 0
+      });
+      calculatedProducts.push({
+        ...item,
+        purchasePrice,
+        sellingPricePerUnit: (orderStatus === 'ตัดจำหน่าย' ? purchasePrice : 0),
+        originalPrice: 0,
+        discountAmount: 0,
+      });
+    }
+    const newOrder = new OrderModel({
+      userName,
+      products: calculatedProducts,
+      subtotal: calculatedSubtotal,
+      total: calculatedSubtotal,
+      paymentMethod: paymentMethod || 'ตัดจำหน่าย',
+      orderStatus: orderStatus || 'ตัดจำหน่าย',
+      orderDate: new Date(),
+    });
+    await newOrder.save();
+    res.status(201).json({ message: "สร้างออเดอร์ตัดจำหน่ายสินค้าเรียบร้อย", order: newOrder });
+  } catch (error) {
+    console.error("Error creating dispose order:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };

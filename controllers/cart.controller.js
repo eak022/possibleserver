@@ -30,6 +30,12 @@ exports.createCart = async (req, res) => {
       return res.status(404).json({ message: "Product not found!" });
     }
 
+    // ตรวจสอบว่าสินค้าหมดอายุหรือไม่
+    const now = new Date();
+    if (product.expirationDate && product.expirationDate <= now) {
+      return res.status(400).json({ message: 'ไม่สามารถเพิ่มสินค้าหมดอายุเข้าตะกร้าได้' });
+    }
+
     // ตรวจสอบจำนวนสินค้าในสต็อก
     const requestedQuantity = pack ? quantity * product.packSize : quantity;
     if (requestedQuantity > product.quantity) {
@@ -134,6 +140,12 @@ exports.deleteAllCarts = async (req, res) => {
         return res.status(404).json({ message: 'ไม่พบสินค้า' });
       }
 
+      // ตรวจสอบว่าสินค้าหมดอายุหรือไม่
+      const now = new Date();
+      if (product.expirationDate && product.expirationDate <= now) {
+        return res.status(400).json({ message: 'ไม่สามารถเพิ่มสินค้าหมดอายุเข้าตะกร้าได้' });
+      }
+
       // คำนวณจำนวนที่ต้องการ
       let requestedQuantity = quantity;
       if (pack !== undefined) {
@@ -207,6 +219,12 @@ exports.deleteCartById = async (req, res) => {
   
       if (!product) {
         return res.status(404).json({ message: "Product not found!" });
+      }
+
+      // ตรวจสอบว่าสินค้าหมดอายุหรือไม่
+      const now = new Date();
+      if (product.expirationDate && product.expirationDate <= now) {
+        return res.status(400).json({ message: 'ไม่สามารถเพิ่มสินค้าหมดอายุเข้าตะกร้าได้' });
       }
 
       // ตรวจสอบว่า barcode ตรงกับ barcodePack หรือ barcodeUnit

@@ -33,23 +33,20 @@ const updateProductStatus = async (req, res, next) => {
                 // เริ่มต้นด้วยสถานะวางจำหน่าย
                 newStatuses = [placedStatus];
 
-                // ตรวจสอบสินค้าหมดอายุ
-                if (product.expirationDate && product.expirationDate <= now) {
-                    newStatuses = [expiredStatus]; // ถ้าหมดอายุแล้ว ให้มีแค่สถานะหมดอายุอย่างเดียว
+                // ตรวจสอบสินค้าหมด (priority สูงสุด)
+                if (product.quantity <= 0) {
+                    newStatuses = [outOfStockStatus];
+                } else if (product.expirationDate && product.expirationDate <= now) {
+                    newStatuses = [expiredStatus]; // ถ้าหมดอายุแล้ว ให้มีแค่สถานะหมดอายุอย่างเดียว (แต่สินค้าต้องไม่หมด)
                 } else {
-                    // ตรวจสอบสินค้าหมด
-                    if (product.quantity <= 0) {
-                        newStatuses = [outOfStockStatus];
-                    } else {
-                        // ตรวจสอบสินค้าใกล้หมด
-                        if (product.quantity < 5) {
-                            newStatuses.push(lowStockStatus);
-                        }
+                    // ตรวจสอบสินค้าใกล้หมด
+                    if (product.quantity < 5) {
+                        newStatuses.push(lowStockStatus);
+                    }
 
-                        // ตรวจสอบสินค้าใกล้หมดอายุ (เฉพาะสินค้าที่ยังไม่หมดอายุ)
-                        if (product.expirationDate && product.expirationDate <= sevenDaysFromNow) {
-                            newStatuses.push(expiringStatus);
-                        }
+                    // ตรวจสอบสินค้าใกล้หมดอายุ (เฉพาะสินค้าที่ยังไม่หมดอายุ)
+                    if (product.expirationDate && product.expirationDate <= sevenDaysFromNow) {
+                        newStatuses.push(expiringStatus);
                     }
                 }
             }

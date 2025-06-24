@@ -28,7 +28,7 @@ const OrderSchema = new Schema({
   paymentMethod: {
     type: String,
     required: true,
-    enum: ["Cash", "BankTransfer"],
+    enum: ["Cash", "BankTransfer", "ตัดจำหน่าย"],
   },
   cash_received: { type: Number, default: 0 },
   change: { type: Number, default: 0 },
@@ -36,7 +36,7 @@ const OrderSchema = new Schema({
   orderStatus: { 
     type: String, 
     required: true,
-    enum: ["ขายสำเร็จ", "ยกเลิก", "คืนสินค้า", "ทิ้ง"],
+    enum: ["ขายสำเร็จ", "ยกเลิก", "คืนสินค้า", "ตัดจำหน่าย"],
     default: "ขายสำเร็จ"
   }
 }, { timestamps: true });

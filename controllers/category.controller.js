@@ -1,4 +1,5 @@
 const CategoryModel = require("../models/Category");
+const ProductModel = require("../models/Product");
 
 exports.createCategory = async (req, res) => {
     const { categoryName } = req.body;  // categoryId ไม่ต้องรับแล้ว เพราะ MongoDB จะสร้าง _id ให้อัตโนมัติ
@@ -76,6 +77,12 @@ exports.deleteCategory = async (req, res) => {
     const category = await CategoryModel.findById(id);
     if (!category) {
       return res.status(404).json({ message: "Category not found" });
+    }
+
+    // เช็คว่ามีสินค้าใช้ category นี้อยู่หรือไม่
+    const productUsingCategory = await ProductModel.findOne({ categoryId: id });
+    if (productUsingCategory) {
+      return res.status(400).json({ message: "ไม่สามารถลบประเภทสินค้าที่ถูกใช้งานอยู่ได้" });
     }
 
     // ใช้ deleteOne แทน remove

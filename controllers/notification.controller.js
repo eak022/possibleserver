@@ -5,8 +5,9 @@ const StatusModel = require('../models/Status');
 exports.getAllNotifications = async (req, res) => {
     try {
         // ดึงสถานะที่ต้องการแจ้งเตือน
-        const [lowStockStatus, expiringStatus, expiredStatus] = await Promise.all([
+        const [lowStockStatus, outOfStockStatus, expiringStatus, expiredStatus] = await Promise.all([
             StatusModel.findOne({ statusName: 'สินค้าใกล้หมด' }),
+            StatusModel.findOne({ statusName: 'สินค้าหมด' }),
             StatusModel.findOne({ statusName: 'สินค้าใกล้หมดอายุ' }),
             StatusModel.findOne({ statusName: 'หมดอายุ' })
         ]);
@@ -15,6 +16,7 @@ exports.getAllNotifications = async (req, res) => {
         const products = await ProductModel.find({
             $or: [
                 { productStatuses: lowStockStatus._id },
+                { productStatuses: outOfStockStatus._id },
                 { productStatuses: expiringStatus._id },
                 { productStatuses: expiredStatus._id }
             ]
@@ -29,7 +31,7 @@ exports.getAllNotifications = async (req, res) => {
 
         products.forEach(product => {
             product.productStatuses.forEach(status => {
-                if (status.statusName === 'สินค้าใกล้หมด') {
+                if (status.statusName === 'สินค้าใกล้หมด' || status.statusName === 'สินค้าหมด') {
                     notifications.lowStock.push({
                         productId: product._id,
                         productName: product.productName,

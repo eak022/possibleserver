@@ -71,13 +71,28 @@ exports.updateStatus = async (req, res) => {
   
 exports.deleteStatus = async (req, res) => {
     const { id } = req.params;
-  
+
+    // รายชื่อสถานะหลักที่ห้ามลบ
+    const mainStatuses = [
+        'วางจำหน่าย',
+        'สินค้าใกล้หมด',
+        'สินค้าใกล้หมดอายุ',
+        'สินค้าหมด',
+        'เลิกขาย',
+        'หมดอายุ'
+    ];
+
     try {
       const status = await StatusModel.findById(id);
       if (!status) {
         return res.status(404).json({ message: "Status not found" });
       }
-  
+
+      // เช็คถ้าเป็นสถานะหลัก
+      if (mainStatuses.includes(status.statusName)) {
+        return res.status(400).json({ message: "สถานะหลักไม่สามารถลบได้" });
+      }
+
       // ใช้ deleteOne แทน remove
       await StatusModel.deleteOne({ _id: id });
       return res.status(200).json({ message: "Status deleted successfully" });
