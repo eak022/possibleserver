@@ -4,6 +4,7 @@ const { Schema, model } = mongoose;
 const PurchaseOrderSchema = new Schema({
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     supplierId: { type: Schema.Types.ObjectId, ref: "Supplier", required: true },
+    orderNumber: { type: Number, unique: true, required: true }, // เลขใบสั่งซื้อ
     products: [
       {
         productId: { type: Schema.Types.ObjectId, ref: "Product", required: true },
@@ -22,5 +23,12 @@ const PurchaseOrderSchema = new Schema({
     status: { type: String, enum: ["pending", "completed"], default: "pending" } // ✅ ป้องกันเติมซ้ำ
 }, { timestamps: true });
 
+// โมเดลสำหรับเก็บตัวนับเลขใบสั่งซื้อ
+const OrderNumberCounterSchema = new Schema({
+    counter: { type: Number, default: 1 }
+});
+
 const PurchaseOrderModel = model("PurchaseOrder", PurchaseOrderSchema);
-module.exports = PurchaseOrderModel;
+const OrderNumberCounterModel = model("OrderNumberCounter", OrderNumberCounterSchema);
+
+module.exports = { PurchaseOrderModel, OrderNumberCounterModel };

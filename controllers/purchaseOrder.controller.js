@@ -1,4 +1,4 @@
-const PurchaseOrderModel = require("../models/PurchaseOrder");
+const { PurchaseOrderModel, OrderNumberCounterModel } = require("../models/PurchaseOrder");
 const ProductModel = require("../models/Product");
 
 exports.receiveStock = async (req, res) => {
@@ -71,6 +71,9 @@ exports.createPurchaseOrder = async (req, res) => {
   try {
     const { userId, supplierId, products, purchaseOrderDate } = req.body;
 
+    // สร้างเลขใบสั่งซื้ออัตโนมัติ
+    const orderNumber = await generateOrderNumber();
+
     let total = 0;
     const updatedProducts = [];
 
@@ -108,6 +111,7 @@ exports.createPurchaseOrder = async (req, res) => {
     const purchaseOrder = new PurchaseOrderModel({
       userId,
       supplierId,
+      orderNumber, // เพิ่มเลขใบสั่งซื้อ
       products: updatedProducts,
       total,
       purchaseOrderDate,
@@ -123,7 +127,9 @@ exports.createPurchaseOrder = async (req, res) => {
 };
 exports.getAllPurchaseOrders = async (req, res) => {
   try {
-    const purchaseOrders = await PurchaseOrderModel.find().populate('userId supplierId products.productId');
+    const purchaseOrders = await PurchaseOrderModel.find()
+      .populate('userId supplierId products.productId')
+      .sort({ orderNumber: 1 }); // เรียงตามเลขใบสั่งซื้อ
     res.status(200).json(purchaseOrders);
   } catch (error) {
     console.error("Error fetching purchase orders:", error);
@@ -272,5 +278,27 @@ exports.getPurchaseOrderById = async (req, res) => {
   } catch (error) {
     console.error("Error fetching purchase order:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ฟังก์ชันสร้างเลขใบสั่งซื้ออัตโนมัติ
+const generateOrderNumber = async () => {
+  try {
+    // หา counter ปัจจุบัน
+    let counter = await OrderNumberCounterModel.findOne();
+    
+    if (!counter) {
+      // ถ้ายังไม่มี counter ให้สร้างใหม่
+      counter = new OrderNumberCounterModel({ counter: 1 });
+    } else {
+      // เพิ่ม counter ขึ้น 1
+      counter.counter += 1;
+    }
+    
+    await counter.save();
+    return counter.counter;
+  } catch (error) {
+    console.error("Error generating order number:", error);
+    throw error;
   }
 };
