@@ -14,6 +14,7 @@ const PurchaseOrderSchema = new Schema({
         expirationDate: {  type: Date },
         subtotal: { type: Number, required: true },
         pack: { type: Boolean, required: true },
+        packSize: { type: Number },
       },
     ],
     total: { type: Number, required: true },

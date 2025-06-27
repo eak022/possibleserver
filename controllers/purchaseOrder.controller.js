@@ -99,7 +99,8 @@ exports.createPurchaseOrder = async (req, res) => {
         sellingPricePerUnit: sellingPricePerUnit,
         expirationDate: item.expirationDate,
         subtotal: subtotal,
-        pack: item.pack
+        pack: item.pack,
+        packSize: item.packSize || product.packSize
       });
     }
 
@@ -180,7 +181,8 @@ exports.updatePurchaseOrder = async (req, res) => {
         sellingPricePerUnit: sellingPricePerUnit,
         expirationDate: item.expirationDate,
         subtotal: subtotal,
-        pack: item.pack
+        pack: item.pack,
+        packSize: item.packSize || product.packSize
       });
     }
 
