@@ -12,7 +12,7 @@ const OrderSchema = new Schema({
       purchasePrice: { type: Number, required: true },
       sellingPricePerUnit: {  type: Number, required: true  },
       pack: { type: Boolean, required: true },
-      
+      packSize: { type: Number },
     },
   ],
   subtotal: { type: Number, required: true },

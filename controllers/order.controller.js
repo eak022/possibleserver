@@ -91,7 +91,8 @@ exports.createOrder = async (req, res) => {
         sellingPricePerUnit: finalPrice,
         pack: item.pack,
         originalPrice: item.price,
-        discountAmount: itemDiscount
+        discountAmount: itemDiscount,
+        packSize: product.packSize
       });
 
       // ตัดสต็อกสินค้า
