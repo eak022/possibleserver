@@ -2,6 +2,7 @@ const OrderModel = require("../models/Order");
 const CartModel = require("../models/Cart");
 const ProductModel = require("../models/Product");
 const PromotionModel = require("../models/Promotion");
+const { checkAndAddStock } = require("./purchaseOrder.controller");
 
 exports.createOrder = async (req, res) => {
   try {
@@ -99,6 +100,9 @@ exports.createOrder = async (req, res) => {
       await ProductModel.findByIdAndUpdate(item.productId, {
         $inc: { quantity: -requiredQuantity },
       });
+
+      // ตรวจสอบและเติมสต็อกอัตโนมัติหลังจากตัดสต็อก
+      await checkAndAddStock(item.productId);
     }
 
     const total = subtotal;
@@ -174,6 +178,9 @@ exports.deleteOrder = async (req, res) => {
       await ProductModel.findByIdAndUpdate(item.productId, {
         $inc: { quantity: item.quantity }
       });
+      
+      // ตรวจสอบและเติมสต็อกอัตโนมัติหลังจากคืนสต็อก
+      await checkAndAddStock(item.productId);
     }
 
     // ลบคำสั่งซื้อ

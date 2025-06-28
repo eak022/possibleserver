@@ -15,6 +15,10 @@ exports.receiveStock = async (req, res) => {
       return res.status(400).json({ message: "This purchase order has already been completed" });
     }
 
+    let addedProducts = [];
+    let skippedProducts = [];
+    let allProductsAdded = true;
+
     for (let item of purchaseOrder.products) {
       const product = await ProductModel.findById(item.productId);
       if (!product) {
@@ -24,6 +28,19 @@ exports.receiveStock = async (req, res) => {
       // ตรวจสอบว่ามีวันหมดอายุหรือไม่
       if (!item.expirationDate) {
         return res.status(400).json({ message: `Expiration date is required for product ${item.productId}` });
+      }
+
+      // เช็คจำนวนสินค้าคงเหลือ
+      if (product.quantity > 0) {
+        // ถ้ายังมีสินค้าคงเหลือ ให้ข้ามไป
+        skippedProducts.push({
+          productName: product.productName,
+          currentStock: product.quantity,
+          requestedQuantity: item.quantity
+        });
+        allProductsAdded = false;
+        console.log(`Skipped ${product.productName}: Current stock ${product.quantity}, requested ${item.quantity}`);
+        continue;
       }
 
       // คำนวณจำนวนสินค้าที่จะเพิ่ม
@@ -49,17 +66,35 @@ exports.receiveStock = async (req, res) => {
 
       // เก็บ log การเปลี่ยนแปลง
       console.log(`Updated product ${product.productName}: Added ${quantityToAdd} units, New total: ${product.quantity}`);
+      
+      addedProducts.push({
+        productName: product.productName,
+        addedQuantity: quantityToAdd,
+        newTotal: product.quantity
+      });
     }
 
-    // เปลี่ยนสถานะของใบสั่งซื้อเป็น completed
+    // เปลี่ยนสถานะของใบสั่งซื้อเป็น completed เฉพาะเมื่อเติมสินค้าทั้งหมดแล้ว
+    if (allProductsAdded) {
     purchaseOrder.status = "completed";
     await purchaseOrder.save();
 
     return res.status(200).json({ 
       message: "Stock received and updated successfully", 
       purchaseOrder,
-      details: "Check server logs for detailed update information"
+        addedProducts,
+        details: "All products have been added to stock"
+      });
+    } else {
+      // ถ้ายังมีสินค้าที่ไม่ได้เติม ให้เก็บสถานะเป็น pending
+      return res.status(200).json({ 
+        message: "Partial stock received", 
+        purchaseOrder,
+        addedProducts,
+        skippedProducts,
+        details: "Some products were skipped due to existing stock. They will be added automatically when stock reaches 0."
     });
+    }
   } catch (error) {
     console.error("Error receiving stock:", error);
     res.status(500).json({ message: "Error receiving stock", error });
@@ -299,6 +334,282 @@ const generateOrderNumber = async () => {
     return counter.counter;
   } catch (error) {
     console.error("Error generating order number:", error);
+    throw error;
+  }
+};
+
+// ฟังก์ชันตรวจสอบและเติมสต็อกอัตโนมัติ
+exports.checkAndAddStock = async (productId) => {
+  try {
+    const product = await ProductModel.findById(productId);
+    if (!product || product.quantity > 0) {
+      return; // ไม่ต้องทำอะไรถ้าสินค้าไม่มีหรือยังมีสต็อก
+    }
+
+    // หาใบสั่งซื้อที่ยังไม่เสร็จและมีสินค้านี้
+    const pendingOrders = await PurchaseOrderModel.find({
+      status: "pending",
+      "products.productId": productId
+    }).sort({ createdAt: 1 }); // เรียงตามวันที่สร้าง (เก่าสุดก่อน)
+
+    for (const order of pendingOrders) {
+      const orderItem = order.products.find(item => 
+        item.productId.toString() === productId.toString()
+      );
+
+      if (!orderItem) continue;
+
+      // ตรวจสอบว่ามีวันหมดอายุหรือไม่
+      if (!orderItem.expirationDate) {
+        console.log(`Skipping ${product.productName}: No expiration date in order ${order.orderNumber}`);
+        continue;
+      }
+
+      // คำนวณจำนวนสินค้าที่จะเพิ่ม
+      let quantityToAdd;
+      if (orderItem.pack && product.packSize) {
+        quantityToAdd = orderItem.quantity * product.packSize;
+      } else {
+        quantityToAdd = orderItem.quantity;
+      }
+
+      // เติมสต็อกสินค้าทั้งหมดในครั้งเดียว
+      product.quantity += quantityToAdd;
+      product.expirationDate = orderItem.expirationDate;
+      await product.save();
+
+      console.log(`Auto-added ${quantityToAdd} units of ${product.productName} from order ${order.orderNumber}`);
+
+      // ตรวจสอบว่าใบสั่งซื้อนี้เติมสินค้าทั้งหมดแล้วหรือยัง
+      const allProductsAdded = await checkIfOrderComplete(order);
+      if (allProductsAdded) {
+        order.status = "completed";
+        await order.save();
+        console.log(`Order ${order.orderNumber} marked as completed`);
+      }
+
+      break; // เติมจากใบสั่งซื้อแรกที่เจอเท่านั้น
+    }
+  } catch (error) {
+    console.error("Error in checkAndAddStock:", error);
+  }
+};
+
+// ฟังก์ชันตรวจสอบว่าใบสั่งซื้อเติมสินค้าทั้งหมดแล้วหรือยัง
+const checkIfOrderComplete = async (order) => {
+  try {
+    // ตรวจสอบสินค้าทั้งหมดในใบสั่งซื้อ
+    for (const item of order.products) {
+      const product = await ProductModel.findById(item.productId);
+      if (!product) {
+        continue; // ข้ามถ้าสินค้าไม่มี
+      }
+
+      // คำนวณจำนวนสินค้าที่ควรมีในสต็อก
+      let expectedQuantity = 0;
+      if (item.pack && product.packSize) {
+        expectedQuantity = item.quantity * product.packSize;
+      } else {
+        expectedQuantity = item.quantity;
+      }
+
+      // ถ้าสินค้านี้ยังไม่มีสต็อกที่เพียงพอ (น้อยกว่า expectedQuantity) 
+      // แสดงว่ายังไม่ควรเปลี่ยนสถานะใบสั่งซื้อเป็น completed
+      if (product.quantity < expectedQuantity) {
+        console.log(`Order ${order.orderNumber} not complete: ${product.productName} has ${product.quantity}/${expectedQuantity}`);
+        return false;
+      }
+    }
+    
+    // ถ้าสินค้าทั้งหมดมีสต็อกเพียงพอแล้ว
+    console.log(`Order ${order.orderNumber} is complete - all products have sufficient stock`);
+    return true;
+  } catch (error) {
+    console.error("Error checking if order complete:", error);
+    return false;
+  }
+};
+
+// API endpoint สำหรับตรวจสอบและเติมสต็อกอัตโนมัติ
+exports.autoAddStock = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    
+    if (!productId) {
+      return res.status(400).json({ message: "Product ID is required" });
+    }
+
+    await checkAndAddStock(productId);
+    
+    const product = await ProductModel.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    res.status(200).json({ 
+      message: "Auto stock check completed",
+      product: {
+        id: product._id,
+        name: product.productName,
+        currentStock: product.quantity
+      }
+    });
+  } catch (error) {
+    console.error("Error in autoAddStock:", error);
+    res.status(500).json({ message: "Error checking and adding stock", error });
+  }
+};
+
+// API endpoint สำหรับตรวจสอบและเติมสต็อกอัตโนมัติทั้งหมด
+exports.autoAddStockAll = async (req, res) => {
+  try {
+    // หาสินค้าทั้งหมดที่มีสต็อก = 0
+    const productsWithZeroStock = await ProductModel.find({ quantity: 0 });
+    
+    let results = [];
+    
+    for (const product of productsWithZeroStock) {
+      const beforeStock = product.quantity;
+      await checkAndAddStock(product._id);
+      
+      // ดึงข้อมูลสินค้าหลังจากอัปเดต
+      const updatedProduct = await ProductModel.findById(product._id);
+      
+      results.push({
+        productId: product._id,
+        productName: product.productName,
+        beforeStock,
+        afterStock: updatedProduct.quantity,
+        stockAdded: updatedProduct.quantity - beforeStock
+      });
+    }
+    
+    res.status(200).json({ 
+      message: "Auto stock check completed for all products",
+      results,
+      totalProductsChecked: productsWithZeroStock.length
+    });
+  } catch (error) {
+    console.error("Error in autoAddStockAll:", error);
+    res.status(500).json({ message: "Error checking and adding stock for all products", error });
+  }
+};
+
+// ฟังก์ชันเติมสต็อกทั้งหมดในใบสั่งซื้อในครั้งเดียว
+exports.addAllStockFromOrder = async (orderId) => {
+  try {
+    const order = await PurchaseOrderModel.findById(orderId);
+    if (!order) {
+      throw new Error("Purchase order not found");
+    }
+
+    if (order.status === "completed") {
+      throw new Error("This purchase order has already been completed");
+    }
+
+    let addedProducts = [];
+    let skippedProducts = [];
+
+    // ตรวจสอบและเติมสต็อกสินค้าทั้งหมดในใบสั่งซื้อ
+    for (const item of order.products) {
+      const product = await ProductModel.findById(item.productId);
+      if (!product) {
+        console.log(`Product not found: ${item.productId}`);
+        continue;
+      }
+
+      // ตรวจสอบว่ามีวันหมดอายุหรือไม่
+      if (!item.expirationDate) {
+        console.log(`Skipping ${product.productName}: No expiration date`);
+        skippedProducts.push({
+          productName: product.productName,
+          reason: "ไม่มีวันหมดอายุ"
+        });
+        continue;
+      }
+
+      // คำนวณจำนวนสินค้าที่จะเพิ่ม
+      let quantityToAdd;
+      if (item.pack && product.packSize) {
+        quantityToAdd = item.quantity * product.packSize;
+      } else {
+        quantityToAdd = item.quantity;
+      }
+
+      // เติมสต็อกสินค้า
+      const oldQuantity = product.quantity;
+      product.quantity += quantityToAdd;
+      product.expirationDate = item.expirationDate;
+      await product.save();
+
+      addedProducts.push({
+        productName: product.productName,
+        addedQuantity: quantityToAdd,
+        oldQuantity,
+        newQuantity: product.quantity
+      });
+
+      console.log(`Added ${quantityToAdd} units of ${product.productName} (${oldQuantity} -> ${product.quantity})`);
+    }
+
+    // เปลี่ยนสถานะใบสั่งซื้อเป็น completed
+    order.status = "completed";
+    await order.save();
+
+    return {
+      success: true,
+      message: "All stock added successfully",
+      addedProducts,
+      skippedProducts,
+      orderNumber: order.orderNumber
+    };
+
+  } catch (error) {
+    console.error("Error adding all stock from order:", error);
+    throw error;
+  }
+};
+
+// ฟังก์ชันตรวจสอบและเติมสต็อกอัตโนมัติสำหรับสินค้าทั้งหมดที่มีสต็อก = 0
+exports.autoAddStockForAllZeroStock = async () => {
+  try {
+    // หาสินค้าทั้งหมดที่มีสต็อก = 0
+    const productsWithZeroStock = await ProductModel.find({ quantity: 0 });
+    
+    let results = [];
+    let totalAdded = 0;
+
+    for (const product of productsWithZeroStock) {
+      const beforeStock = product.quantity;
+      
+      // เรียกใช้ฟังก์ชันเติมสต็อกอัตโนมัติ
+      await this.checkAndAddStock(product._id);
+      
+      // ดึงข้อมูลสินค้าหลังจากอัปเดต
+      const updatedProduct = await ProductModel.findById(product._id);
+      
+      const stockAdded = updatedProduct.quantity - beforeStock;
+      if (stockAdded > 0) {
+        totalAdded += stockAdded;
+        results.push({
+          productId: product._id,
+          productName: product.productName,
+          beforeStock,
+          afterStock: updatedProduct.quantity,
+          stockAdded
+        });
+      }
+    }
+    
+    return {
+      success: true,
+      message: `Auto stock check completed. Added stock for ${results.length} products.`,
+      results,
+      totalProductsChecked: productsWithZeroStock.length,
+      totalStockAdded: totalAdded
+    };
+  } catch (error) {
+    console.error("Error in autoAddStockForAllZeroStock:", error);
     throw error;
   }
 };
