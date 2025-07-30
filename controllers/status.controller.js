@@ -46,18 +46,33 @@ exports.getStatusById = async (req, res) => {
 exports.updateStatus = async (req, res) => {
     const { id } = req.params;
     const { statusName } = req.body;
+
+    // รายชื่อสถานะหลักที่ห้ามแก้ไข
+    const mainStatuses = [
+        'วางจำหน่าย',
+        'สินค้าใกล้หมด',
+        'สินค้าใกล้หมดอายุ',
+        'สินค้าหมด',
+        'เลิกขาย',
+        'หมดอายุ'
+    ];
   
     try {
+      const status = await StatusModel.findById(id);
+      if (!status) {
+        return res.status(404).json({ message: "Status not found" });
+      }
+
+      // เช็คถ้าเป็นสถานะหลัก
+      if (mainStatuses.includes(status.statusName)) {
+        return res.status(400).json({ message: "สถานะหลักไม่สามารถแก้ไขได้" });
+      }
+
       if (statusName) {
         const existingStatus = await StatusModel.findOne({ statusName: statusName });
         if (existingStatus && existingStatus._id.toString() !== id) {
           return res.status(400).json({ message: "A status with this name already exists." });
         }
-      }
-
-      const status = await StatusModel.findById(id);
-      if (!status) {
-        return res.status(404).json({ message: "Status not found" });
       }
   
       if (statusName) status.statusName = statusName;
