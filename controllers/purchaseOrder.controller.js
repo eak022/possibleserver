@@ -206,9 +206,9 @@ exports.updatePurchaseOrder = async (req, res) => {
         return res.status(404).json({ message: `Product not found for ID: ${item.productId}` });
       }
 
-      // คำนวณราคาตามประเภทการขาย (แพ็คหรือชิ้น)
-      const purchasePrice = item.pack ? product.purchasePrice * product.packSize : product.purchasePrice;
-      const sellingPricePerUnit = item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+      // ใช้ราคาที่ส่งมาจาก frontend แทนราคาจากฐานข้อมูลสินค้า
+      const purchasePrice = item.purchasePrice || (item.pack ? product.purchasePrice * product.packSize : product.purchasePrice);
+      const sellingPricePerUnit = item.sellingPricePerUnit || (item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit);
 
       // คำนวณ subtotal
       const subtotal = item.quantity * purchasePrice;
