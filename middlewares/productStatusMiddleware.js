@@ -33,19 +33,19 @@ const updateProductStatus = async (req, res, next) => {
                 // เริ่มต้นด้วยสถานะวางจำหน่าย
                 newStatuses = [placedStatus];
 
-                // ตรวจสอบสินค้าหมด (priority สูงสุด)
-                if (product.quantity <= 0) {
+                // ✅ ตรวจสอบสินค้าหมดจาก totalQuantity (รวมทุกล็อต)
+                if (product.totalQuantity <= 0) {
                     newStatuses = [outOfStockStatus];
-                } else if (product.expirationDate && product.expirationDate <= now) {
+                } else if (product.nearestExpirationDate && product.nearestExpirationDate <= now) {
                     newStatuses = [expiredStatus]; // ถ้าหมดอายุแล้ว ให้มีแค่สถานะหมดอายุอย่างเดียว (แต่สินค้าต้องไม่หมด)
                 } else {
                     // ตรวจสอบสินค้าใกล้หมด
-                    if (product.quantity < 5) {
+                    if (product.totalQuantity < 5) {
                         newStatuses.push(lowStockStatus);
                     }
 
                     // ตรวจสอบสินค้าใกล้หมดอายุ (เฉพาะสินค้าที่ยังไม่หมดอายุ)
-                    if (product.expirationDate && product.expirationDate <= sevenDaysFromNow) {
+                    if (product.nearestExpirationDate && product.nearestExpirationDate <= sevenDaysFromNow) {
                         newStatuses.push(expiringStatus);
                     }
                 }
