@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const {
   receiveStock, 
+  receiveStockFromDelivery,
+  updateDeliveryInfo,
   createPurchaseOrder, 
   getPurchaseOrderById, 
   getAllPurchaseOrders, 
@@ -15,6 +17,8 @@ const {
 
 router.post("/",createPurchaseOrder);
 router.post("/:id/receive",receiveStock);
+router.post("/:id/receive-from-delivery",receiveStockFromDelivery);
+router.put("/:id/delivery-info",updateDeliveryInfo);
 router.get("/",getAllPurchaseOrders);
 router.get("/:id",getPurchaseOrderById);
 router.put("/:id",updatePurchaseOrder);
