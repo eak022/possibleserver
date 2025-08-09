@@ -33,7 +33,7 @@ exports.createOrder = async (req, res) => {
       }
     }
 
-    // คำนวณราคาทั้งหมดและโปรโมชั่น
+    // คำนวณราคาทั้งหมดและโปรโมชั่น (ยึดตามรายการในตะกร้า: ใช้โปรฯ เฉพาะบรรทัดที่มี promotionId)
     let subtotal = 0;
     let totalDiscount = 0;
     const products = [];
@@ -55,31 +55,26 @@ exports.createOrder = async (req, res) => {
         ? (currentProduct.averagePurchasePrice || 0) * currentProduct.packSize  // ถ้าเป็นแพ็ค คูณ packSize
         : (currentProduct.averagePurchasePrice || 0); // ถ้าเป็นหน่วยเดียว ใช้ราคาปกติ
 
-      // ตรวจสอบโปรโมชั่นที่ใช้งานได้
-      const currentDate = new Date();
-      const activePromotion = await PromotionModel.findOne({
-        productId: item.productId,
-        validityStart: { $lte: currentDate },
-        validityEnd: { $gte: currentDate }
-      });
-
+      // ตีความโปรโมชันจากบรรทัดในตะกร้าเท่านั้น
+      const nowDate = new Date();
       let finalPrice = item.price;
       let itemDiscount = 0;
-
-      if (activePromotion) {
-        // ใช้ราคาโปรโมชั่น
-        finalPrice = activePromotion.discountedPrice;
-        itemDiscount = (item.price - activePromotion.discountedPrice) * item.quantity;
-        totalDiscount += itemDiscount;
-
-        // บันทึกโปรโมชั่นที่ใช้
-        appliedPromotions.push({
-          productId: activePromotion._id,
-          promotionName: activePromotion.promotionName,
-          discountedPrice: activePromotion.discountedPrice,
-          originalPrice: item.price,
-          discountAmount: itemDiscount
-        });
+      let promoDocForLine = null;
+      if (item.promotionId) {
+        const promoById = await PromotionModel.findById(item.promotionId);
+        if (promoById && promoById.productId?.toString() === item.productId.toString() && new Date(promoById.validityStart) <= nowDate && nowDate <= new Date(promoById.validityEnd)) {
+          promoDocForLine = promoById;
+          finalPrice = promoById.discountedPrice;
+          itemDiscount = (item.price - promoById.discountedPrice) * item.quantity;
+          totalDiscount += itemDiscount;
+          appliedPromotions.push({
+            productId: promoById._id,
+            promotionName: promoById.promotionName,
+            discountedPrice: promoById.discountedPrice,
+            originalPrice: item.price,
+            discountAmount: itemDiscount
+          });
+        }
       }
 
       subtotal += finalPrice * item.quantity;
@@ -97,8 +92,22 @@ exports.createOrder = async (req, res) => {
       });
 
       // ✅ ตัดสต็อกสินค้าแบบ FIFO (First In, First Out)
+      // กรณีมีโปรโมชันที่จำกัดล็อต:
+      // - ถ้าเป็นบรรทัดโปรฯ ให้ includeOnlyLotNumbers = ล็อตของโปรฯ
+      // - ถ้าเป็นบรรทัดปกติ ให้ exclude ล็อตของโปรฯ ออก เพื่อสงวนให้โปรฯ
       const productToReduce = await ProductModel.findById(item.productId);
-      const reductionResult = productToReduce.reduceLotQuantity(requiredQuantity);
+      let options = {};
+      const activePromoForProduct = await PromotionModel.findOne({
+        productId: item.productId,
+        validityStart: { $lte: nowDate },
+        validityEnd: { $gte: nowDate }
+      }).lean();
+      if (item.promotionId && promoDocForLine && Array.isArray(promoDocForLine.appliedLots) && promoDocForLine.appliedLots.length > 0) {
+        options.includeOnlyLotNumbers = promoDocForLine.appliedLots;
+      } else if (activePromoForProduct && Array.isArray(activePromoForProduct.appliedLots) && activePromoForProduct.appliedLots.length > 0) {
+        options.excludeLotNumbers = activePromoForProduct.appliedLots;
+      }
+      const reductionResult = productToReduce.reduceLotQuantity(requiredQuantity, options);
       
       if (!reductionResult.success) {
         return res.status(400).json({ 
@@ -216,10 +225,20 @@ exports.deleteOrder = async (req, res) => {
           }
         }
       } else {
-        // Fallback สำหรับ order เก่าที่ไม่มีข้อมูลล็อต
-        await ProductModel.findByIdAndUpdate(item.productId, {
-          $inc: { quantity: item.quantity }
-        });
+        // Fallback สำหรับ order เก่าที่ไม่มีข้อมูลล็อต: คืนเข้าล็อตที่หมดอายุช้าที่สุดก่อน (ถ้ามี active)
+        const product = await ProductModel.findById(item.productId);
+        if (product) {
+          let remaining = item.pack ? (item.quantity * product.packSize) : item.quantity;
+          const eligibleLots = (product.lots || [])
+            .filter(l => l.status === 'active')
+            .sort((a,b) => new Date(b.expirationDate) - new Date(a.expirationDate));
+          for (const lot of eligibleLots) {
+            if (remaining <= 0) break;
+            lot.quantity += remaining;
+            remaining = 0;
+          }
+          await product.save();
+        }
       }
       
       // ตรวจสอบและเติมสต็อกอัตโนมัติหลังจากคืนสต็อก
@@ -269,7 +288,7 @@ exports.updateOrderDetail = async (req, res) => {
         return res.status(400).json({ message: `Not enough stock for ${product.productName}. Available: ${product.totalQuantity}, Required: ${quantityDiff}` });
       }
 
-      // ✅ ปรับสต็อกสินค้าแบบ FIFO เฉพาะเมื่อต้องตัดเพิ่ม
+      // ✅ ปรับสต็อกสินค้าแบบ FIFO เฉพาะเมื่อต้องตัดเพิ่ม และบันทึก lotsUsed
       if (quantityDiff > 0) {
         const reductionResult = product.reduceLotQuantity(quantityDiff);
         if (!reductionResult.success) {
@@ -278,10 +297,50 @@ exports.updateOrderDetail = async (req, res) => {
           });
         }
         await product.save();
+
+        // บันทึกรายการล็อตที่ใช้เพิ่มเข้าไปใน oldItem.lotsUsed
+        const nowLots = product.lots || [];
+        const appendLots = reductionResult.reductions.map(r => {
+          const lot = nowLots.find(l => l.lotNumber === r.lotNumber) || {};
+          return {
+            lotNumber: r.lotNumber,
+            quantityTaken: r.quantityTaken,
+            purchasePrice: lot.purchasePrice,
+            expirationDate: lot.expirationDate
+          };
+        });
+        if (!Array.isArray(oldItem.lotsUsed)) {
+          oldItem.lotsUsed = [];
+        }
+        oldItem.lotsUsed.push(...appendLots);
       } else if (quantityDiff < 0) {
-        // ถ้าลดจำนวน ต้องคืนสต็อก (ซับซ้อน - ยังไม่ implement)
-        // TODO: Implement stock return logic
-        return res.status(400).json({ message: "Stock return not implemented yet. Cannot reduce order quantity." });
+        // ✅ คืนสต็อกตาม lotsUsed (LIFO)
+        let remainingToReturn = Math.abs(quantityDiff);
+        if (!Array.isArray(oldItem.lotsUsed) || oldItem.lotsUsed.length === 0) {
+          return res.status(400).json({ message: "Cannot reduce quantity: order has no lot usage history to revert." });
+        }
+        // คืนจากท้ายสุดก่อน
+        for (let i = oldItem.lotsUsed.length - 1; i >= 0 && remainingToReturn > 0; i--) {
+          const used = oldItem.lotsUsed[i];
+          const giveBack = Math.min(remainingToReturn, used.quantityTaken);
+          const lot = product.lots.find(l => l.lotNumber === used.lotNumber);
+          if (lot) {
+            lot.quantity += giveBack;
+            if (lot.status === 'depleted' && lot.quantity > 0) {
+              lot.status = 'active';
+            }
+          }
+          used.quantityTaken -= giveBack;
+          remainingToReturn -= giveBack;
+          if (used.quantityTaken === 0) {
+            // ลบรายการที่คืนครบแล้ว
+            oldItem.lotsUsed.splice(i, 1);
+          }
+        }
+        await product.save();
+        if (remainingToReturn > 0) {
+          return res.status(400).json({ message: `Failed to return stock completely. Remaining: ${remainingToReturn}` });
+        }
       }
 
       // อัปเดตข้อมูลสินค้า (แต่ห้ามแก้ pack)
