@@ -9,10 +9,20 @@ const OrderSchema = new Schema({
       image: { type: String, required: true },
       productName: { type: String, required: true },
       quantity: { type: Number, required: true, default: 1 },
-      purchasePrice: { type: Number, required: true },
-      sellingPricePerUnit: {  type: Number, required: true  },
+      purchasePrice: { type: Number, required: true }, // ราคาทุนเฉลี่ย ณ เวลาขาย
+      sellingPricePerUnit: {  type: Number, required: true  }, // ราคาขาย ณ เวลาขาย
       pack: { type: Boolean, required: true },
       packSize: { type: Number },
+      // ✅ ข้อมูลล็อตที่ใช้ในการขาย
+      lotsUsed: [{
+        lotNumber: { type: String, required: true },
+        quantityTaken: { type: Number, required: true }, // จำนวนที่ใช้จากล็อตนี้
+        purchasePrice: { type: Number, required: true }, // ราคาซื้อของล็อตนี้
+        expirationDate: { type: Date, required: true } // วันหมดอายุของล็อตนี้
+      }],
+      // ✅ ข้อมูลเพิ่มเติม
+      originalPrice: { type: Number }, // ราคาเดิมก่อนโปรโมชั่น
+      discountAmount: { type: Number, default: 0 }, // ส่วนลด
     },
   ],
   subtotal: { type: Number, required: true },
@@ -22,7 +32,6 @@ const OrderSchema = new Schema({
       productId: { type: Schema.Types.ObjectId, ref: "Promotion", required: true },
       promotionName: { type: String, required: true },
       discountedPrice: { type: Number, required: true },
-
     },
   ],
   paymentMethod: {

@@ -9,8 +9,15 @@ const PurchaseOrderSchema = new Schema({
       {
         productId: { type: Schema.Types.ObjectId, ref: "Product", required: true },
         productName: { type: String, required: true },
-        quantity: { type: Number, required: true, default: 1 },
-        purchasePrice: { type: Number, required: true },
+        // ข้อมูลการสั่งซื้อ
+        orderedQuantity: { type: Number, required: true, default: 1 },
+        estimatedPrice: { type: Number, required: true },
+        // ข้อมูลการส่งมอบจริง
+        deliveredQuantity: { type: Number, default: 0 },
+        actualPrice: { type: Number },
+        deliveryDate: { type: Date },
+        deliveryNotes: { type: String },
+        // ข้อมูลอื่นๆ
         sellingPricePerUnit: {  type: Number  },
         expirationDate: {  type: Date },
         subtotal: { type: Number, required: true },
@@ -20,7 +27,8 @@ const PurchaseOrderSchema = new Schema({
     ],
     total: { type: Number, required: true },
     purchaseOrderDate: { type: Date, required: true },
-    status: { type: String, enum: ["pending", "completed"], default: "pending" } // ✅ ป้องกันเติมซ้ำ
+    status: { type: String, enum: ["pending", "delivered", "completed"], default: "pending" }, // เพิ่มสถานะ delivered
+    deliveryStatus: { type: String, enum: ["not_delivered", "partially_delivered", "fully_delivered"], default: "not_delivered" }
 }, { timestamps: true });
 
 // โมเดลสำหรับเก็บตัวนับเลขใบสั่งซื้อ

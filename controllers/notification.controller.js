@@ -36,7 +36,7 @@ exports.getAllNotifications = async (req, res) => {
                         productId: product._id,
                         productName: product.productName,
                         productImage: product.productImage,
-                        quantity: product.quantity,
+                        quantity: product.totalQuantity,
                         status: status.statusName,
                         statusColor: status.statusColor
                     });
@@ -45,16 +45,25 @@ exports.getAllNotifications = async (req, res) => {
                         productId: product._id,
                         productName: product.productName,
                         productImage: product.productImage,
-                        expirationDate: product.expirationDate,
+                        expirationDate: product.nearestExpirationDate,
                         status: status.statusName,
                         statusColor: status.statusColor
                     });
                 } else if (status.statusName === 'หมดอายุ') {
+                    // คำนวณจำนวนล็อตที่หมดอายุและมีสต็อกอยู่
+                    const currentDate = new Date();
+                    const expiredLots = product.lots.filter(lot => {
+                        const expirationDate = new Date(lot.expirationDate);
+                        return lot.status === 'active' && lot.quantity > 0 && expirationDate <= currentDate;
+                    });
+                    const totalExpiredQuantity = expiredLots.reduce((sum, lot) => sum + lot.quantity, 0);
+
                     notifications.expired.push({
                         productId: product._id,
                         productName: product.productName,
                         productImage: product.productImage,
-                        expirationDate: product.expirationDate,
+                        expirationDate: product.nearestExpirationDate,
+                        quantity: totalExpiredQuantity, // จำนวนล็อตที่หมดอายุและมีสต็อก
                         status: status.statusName,
                         statusColor: status.statusColor
                     });
@@ -98,7 +107,7 @@ exports.getLowStockNotifications = async (req, res) => {
             productId: product._id,
             productName: product.productName,
             productImage: product.productImage,
-            quantity: product.quantity,
+            quantity: product.totalQuantity,
             status: 'สินค้าใกล้หมด',
             statusColor: lowStockStatus.statusColor
         }));
@@ -131,7 +140,7 @@ exports.getExpiringNotifications = async (req, res) => {
             productId: product._id,
             productName: product.productName,
             productImage: product.productImage,
-            expirationDate: product.expirationDate,
+            expirationDate: product.nearestExpirationDate,
             status: 'สินค้าใกล้หมดอายุ',
             statusColor: expiringStatus.statusColor
         }));

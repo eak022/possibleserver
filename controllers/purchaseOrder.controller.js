@@ -1,6 +1,156 @@
 const { PurchaseOrderModel, OrderNumberCounterModel } = require("../models/PurchaseOrder");
 const ProductModel = require("../models/Product");
 
+// ฟังก์ชันใหม่สำหรับอัพเดทข้อมูลการส่งมอบ
+exports.updateDeliveryInfo = async (req, res) => {
+  try {
+    const purchaseOrderId = req.params.id;
+    const { deliveryData } = req.body; // [{ productId, deliveredQuantity, actualPrice, deliveryDate, deliveryNotes }]
+
+    const purchaseOrder = await PurchaseOrderModel.findById(purchaseOrderId);
+    if (!purchaseOrder) {
+      return res.status(404).json({ message: "Purchase order not found" });
+    }
+
+    // อัพเดทข้อมูลการส่งมอบสำหรับแต่ละสินค้า
+    for (const delivery of deliveryData) {
+      const productIndex = purchaseOrder.products.findIndex(
+        p => p.productId.toString() === delivery.productId
+      );
+
+      if (productIndex !== -1) {
+        purchaseOrder.products[productIndex].deliveredQuantity = delivery.deliveredQuantity || 0;
+        purchaseOrder.products[productIndex].actualPrice = delivery.actualPrice;
+        purchaseOrder.products[productIndex].deliveryDate = delivery.deliveryDate;
+        purchaseOrder.products[productIndex].deliveryNotes = delivery.deliveryNotes;
+      }
+    }
+
+    // คำนวณสถานะการส่งมอบ
+    const totalOrdered = purchaseOrder.products.reduce((sum, p) => sum + p.orderedQuantity, 0);
+    const totalDelivered = purchaseOrder.products.reduce((sum, p) => sum + (p.deliveredQuantity || 0), 0);
+
+    if (totalDelivered === 0) {
+      purchaseOrder.deliveryStatus = "not_delivered";
+    } else if (totalDelivered < totalOrdered) {
+      purchaseOrder.deliveryStatus = "partially_delivered";
+    } else {
+      purchaseOrder.deliveryStatus = "fully_delivered";
+    }
+
+    // ถ้าส่งมอบครบแล้ว ให้เปลี่ยนสถานะเป็น delivered
+    if (purchaseOrder.deliveryStatus === "fully_delivered") {
+      purchaseOrder.status = "delivered";
+    }
+
+    await purchaseOrder.save();
+
+    res.status(200).json({ 
+      message: "Delivery information updated successfully", 
+      purchaseOrder 
+    });
+  } catch (error) {
+    console.error("Error updating delivery info:", error);
+    res.status(500).json({ message: "Error updating delivery info", error });
+  }
+};
+
+// ฟังก์ชันใหม่สำหรับรับสต็อกจากข้อมูลการส่งมอบจริง
+exports.receiveStockFromDelivery = async (req, res) => {
+  try {
+    const purchaseOrderId = req.params.id;
+    const purchaseOrder = await PurchaseOrderModel.findById(purchaseOrderId);
+    
+    if (!purchaseOrder) {
+      return res.status(404).json({ message: "Purchase order not found" });
+    }
+
+    // เช็คว่าใบสั่งซื้อได้รับการเติมสต็อกแล้วหรือยัง
+    if (purchaseOrder.status === "completed") {
+      return res.status(400).json({ message: "This purchase order has already been completed" });
+    }
+
+    // เช็คว่ามีข้อมูลการส่งมอบหรือไม่
+    if (purchaseOrder.deliveryStatus === "not_delivered") {
+      return res.status(400).json({ message: "No delivery information available. Please update delivery info first." });
+    }
+
+    let addedProducts = [];
+
+    for (let item of purchaseOrder.products) {
+      const product = await ProductModel.findById(item.productId);
+      if (!product) {
+        return res.status(404).json({ message: `Product with ID ${item.productId} not found` });
+      }
+
+      // ใช้ข้อมูลการส่งมอบจริง
+      const deliveredQuantity = item.deliveredQuantity || 0;
+      if (deliveredQuantity === 0) {
+        continue; // ข้ามสินค้าที่ยังไม่ส่งมอบ
+      }
+
+      // ตรวจสอบว่ามีวันหมดอายุหรือไม่
+      if (!item.expirationDate) {
+        return res.status(400).json({ message: `Expiration date is required for product ${item.productId}` });
+      }
+
+      // คำนวณจำนวนสินค้าที่จะเพิ่มเป็นล็อต
+      let quantityToAdd;
+      if (item.pack && product.packSize) {
+        // ถ้าเป็นแพ็ค ให้คูณด้วย packSize
+        quantityToAdd = deliveredQuantity * product.packSize;
+        console.log(`Adding pack: ${deliveredQuantity} packs × ${product.packSize} units = ${quantityToAdd} units`);
+      } else {
+        // ถ้าเป็นชิ้น ใช้จำนวนปกติ
+        quantityToAdd = deliveredQuantity;
+        console.log(`Adding units: ${quantityToAdd} units`);
+      }
+
+      // ใช้ราคาจริงที่ส่งมอบ
+      let actualPurchasePrice = item.actualPrice || item.estimatedPrice;
+      
+      // ถ้าเป็นแพ็ค ให้หารด้วย packSize เพื่อได้ราคาต่อชิ้น
+      if (item.pack && product.packSize && product.packSize > 0) {
+        actualPurchasePrice = actualPurchasePrice / product.packSize;
+        console.log(`Converting pack price to unit price: ${item.actualPrice || item.estimatedPrice} / ${product.packSize} = ${actualPurchasePrice}`);
+      }
+
+      // ✅ สร้างล็อตใหม่แทนการเพิ่ม quantity
+      await product.addLot({
+        quantity: quantityToAdd,
+        purchasePrice: actualPurchasePrice, // ราคาต่อชิ้น
+        expirationDate: item.expirationDate,
+        purchaseOrderId: purchaseOrderId
+      });
+
+      // เก็บ log การเปลี่ยนแปลง
+      console.log(`Updated product ${product.productName}: Added ${quantityToAdd} units, New total: ${product.totalQuantity}`);
+      
+      addedProducts.push({
+        productName: product.productName,
+        deliveredQuantity: deliveredQuantity,
+        addedQuantity: quantityToAdd,
+        purchasePricePerUnit: actualPurchasePrice,
+        newTotal: product.totalQuantity
+      });
+    }
+
+    // ✅ เปลี่ยนสถานะของใบสั่งซื้อเป็น completed เมื่อเติมสินค้าทั้งหมดแล้ว
+    purchaseOrder.status = "completed";
+    await purchaseOrder.save();
+
+    return res.status(200).json({ 
+      message: "Stock received and updated successfully from delivery data", 
+      purchaseOrder,
+      addedProducts,
+      details: "Products have been added to stock based on actual delivery"
+    });
+  } catch (error) {
+    console.error("Error receiving stock from delivery:", error);
+    res.status(500).json({ message: "Error receiving stock from delivery", error });
+  }
+};
+
 exports.receiveStock = async (req, res) => {
   try {
     const purchaseOrderId = req.params.id;
@@ -16,8 +166,6 @@ exports.receiveStock = async (req, res) => {
     }
 
     let addedProducts = [];
-    let skippedProducts = [];
-    let allProductsAdded = true;
 
     for (let item of purchaseOrder.products) {
       const product = await ProductModel.findById(item.productId);
@@ -30,77 +178,76 @@ exports.receiveStock = async (req, res) => {
         return res.status(400).json({ message: `Expiration date is required for product ${item.productId}` });
       }
 
-      // เช็คจำนวนสินค้าคงเหลือ
-      if (product.quantity > 0) {
-        // ถ้ายังมีสินค้าคงเหลือ ให้ข้ามไป
-        skippedProducts.push({
-          productName: product.productName,
-          currentStock: product.quantity,
-          requestedQuantity: item.quantity
-        });
-        allProductsAdded = false;
-        console.log(`Skipped ${product.productName}: Current stock ${product.quantity}, requested ${item.quantity}`);
-        continue;
-      }
+      // ✅ ระบบล็อตใหม่ - เพิ่มสต็อกใหม่ได้เสมอ ไม่ว่าสต็อกเก่าจะเหลือหรือไม่
 
-      // คำนวณจำนวนสินค้าที่จะเพิ่ม
+      // คำนวณจำนวนสินค้าที่จะเพิ่มเป็นล็อต
       let quantityToAdd;
       if (item.pack && product.packSize) {
         // ถ้าเป็นแพ็ค ให้คูณด้วย packSize
-        quantityToAdd = item.quantity * product.packSize;
-        console.log(`Adding pack: ${item.quantity} packs × ${product.packSize} units = ${quantityToAdd} units`);
+        quantityToAdd = (item.deliveredQuantity || item.orderedQuantity) * product.packSize;
+        console.log(`Adding pack: ${item.deliveredQuantity || item.orderedQuantity} packs × ${product.packSize} units = ${quantityToAdd} units`);
       } else {
         // ถ้าเป็นชิ้น ใช้จำนวนปกติ
-        quantityToAdd = item.quantity;
+        quantityToAdd = item.deliveredQuantity || item.orderedQuantity;
         console.log(`Adding units: ${quantityToAdd} units`);
       }
 
-      // เติมสต็อกสินค้า
-      product.quantity += quantityToAdd;
+      // ใช้ราคาจริงที่ส่งมอบ
+      let actualPurchasePrice = item.actualPrice || item.estimatedPrice;
+      
+      // ถ้าเป็นแพ็ค ให้หารด้วย packSize เพื่อได้ราคาต่อชิ้น
+      if (item.pack && product.packSize && product.packSize > 0) {
+        actualPurchasePrice = actualPurchasePrice / product.packSize;
+        console.log(`Converting pack price to unit price: ${item.actualPrice || item.estimatedPrice} / ${product.packSize} = ${actualPurchasePrice}`);
+      }
 
-      // อัปเดตวันหมดอายุ
-      product.expirationDate = item.expirationDate;
-
-      // บันทึกการเปลี่ยนแปลง
-      await product.save();
+      // ✅ สร้างล็อตใหม่แทนการเพิ่ม quantity
+      await product.addLot({
+        quantity: quantityToAdd,
+        purchasePrice: actualPurchasePrice, // ราคาต่อชิ้น
+        expirationDate: item.expirationDate,
+        purchaseOrderId: purchaseOrderId
+      });
 
       // เก็บ log การเปลี่ยนแปลง
-      console.log(`Updated product ${product.productName}: Added ${quantityToAdd} units, New total: ${product.quantity}`);
+      console.log(`Updated product ${product.productName}: Added ${quantityToAdd} units, New total: ${product.totalQuantity}`);
       
       addedProducts.push({
         productName: product.productName,
         addedQuantity: quantityToAdd,
-        newTotal: product.quantity
+        purchasePricePerUnit: actualPurchasePrice,
+        newTotal: product.totalQuantity
       });
     }
 
-    // เปลี่ยนสถานะของใบสั่งซื้อเป็น completed เฉพาะเมื่อเติมสินค้าทั้งหมดแล้ว
-    if (allProductsAdded) {
+    // ✅ เปลี่ยนสถานะของใบสั่งซื้อเป็น completed เมื่อเติมสินค้าทั้งหมดแล้ว
     purchaseOrder.status = "completed";
+    
+    // อัพเดตสถานะการส่งมอบ
+    const totalOrdered = purchaseOrder.products.reduce((sum, p) => sum + p.orderedQuantity, 0);
+    const totalDelivered = purchaseOrder.products.reduce((sum, p) => sum + (p.deliveredQuantity || 0), 0);
+
+    if (totalDelivered === 0) {
+      purchaseOrder.deliveryStatus = "not_delivered";
+    } else if (totalDelivered < totalOrdered) {
+      purchaseOrder.deliveryStatus = "partially_delivered";
+    } else {
+      purchaseOrder.deliveryStatus = "fully_delivered";
+    }
+    
     await purchaseOrder.save();
 
     return res.status(200).json({ 
       message: "Stock received and updated successfully", 
       purchaseOrder,
-        addedProducts,
-        details: "All products have been added to stock"
-      });
-    } else {
-      // ถ้ายังมีสินค้าที่ไม่ได้เติม ให้เก็บสถานะเป็น pending
-      return res.status(200).json({ 
-        message: "Partial stock received", 
-        purchaseOrder,
-        addedProducts,
-        skippedProducts,
-        details: "Some products were skipped due to existing stock. They will be added automatically when stock reaches 0."
+      addedProducts,
+      details: "All products have been added to stock"
     });
-    }
   } catch (error) {
     console.error("Error receiving stock:", error);
     res.status(500).json({ message: "Error receiving stock", error });
   }
 };
-
 
 exports.createPurchaseOrder = async (req, res) => {
   try {
@@ -118,12 +265,12 @@ exports.createPurchaseOrder = async (req, res) => {
         return res.status(404).json({ message: `Product not found for ID: ${item.productId}` });
       }
 
-      // คำนวณราคาตามประเภทการขาย (แพ็คหรือชิ้น)
-      const purchasePrice = item.pack ? product.purchasePrice * product.packSize : product.purchasePrice;
+      // คำนวณราคาตามประเภทการขาย (แพ็คหรือชิ้น) - ใช้ averagePurchasePrice
+      const estimatedPrice = item.pack ? (product.averagePurchasePrice || 0) * product.packSize : (product.averagePurchasePrice || 0);
       const sellingPricePerUnit = item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
 
       // คำนวณ subtotal ของแต่ละสินค้า
-      const subtotal = item.quantity * purchasePrice;
+      const subtotal = item.orderedQuantity * estimatedPrice;
 
       // สะสม total
       total += subtotal;
@@ -132,8 +279,12 @@ exports.createPurchaseOrder = async (req, res) => {
       updatedProducts.push({
         productId: item.productId,
         productName: product.productName,
-        quantity: item.quantity,
-        purchasePrice: purchasePrice,
+        orderedQuantity: item.orderedQuantity,
+        estimatedPrice: estimatedPrice,
+        deliveredQuantity: 0, // เริ่มต้นเป็น 0
+        actualPrice: null, // ยังไม่มีราคาจริง
+        deliveryDate: null, // ยังไม่มีวันที่ส่งมอบ
+        deliveryNotes: "", // ยังไม่มีหมายเหตุ
         sellingPricePerUnit: sellingPricePerUnit,
         expirationDate: item.expirationDate,
         subtotal: subtotal,
@@ -150,7 +301,8 @@ exports.createPurchaseOrder = async (req, res) => {
       products: updatedProducts,
       total,
       purchaseOrderDate,
-      status: "pending"
+      status: "pending",
+      deliveryStatus: "not_delivered"
     });
 
     await purchaseOrder.save();
@@ -176,6 +328,8 @@ exports.updatePurchaseOrder = async (req, res) => {
     const purchaseOrderId = req.params.id;
     const { products, supplierId, purchaseOrderDate } = req.body;
 
+    console.log('Received update data:', { products, supplierId, purchaseOrderDate });
+
     const existingPurchaseOrder = await PurchaseOrderModel.findById(purchaseOrderId);
     if (!existingPurchaseOrder) {
       return res.status(404).json({ message: "Purchase order not found" });
@@ -186,7 +340,7 @@ exports.updatePurchaseOrder = async (req, res) => {
       for (let oldItem of existingPurchaseOrder.products) {
         const product = await ProductModel.findById(oldItem.productId);
         if (product) {
-          let quantityToRemove = oldItem.quantity;
+          let quantityToRemove = oldItem.orderedQuantity;
           if (oldItem.pack && product.packSize) {
             quantityToRemove *= product.packSize;
           }
@@ -206,19 +360,43 @@ exports.updatePurchaseOrder = async (req, res) => {
         return res.status(404).json({ message: `Product not found for ID: ${item.productId}` });
       }
 
-      // คำนวณราคาตามประเภทการขาย (แพ็คหรือชิ้น)
-      const purchasePrice = item.pack ? product.purchasePrice * product.packSize : product.purchasePrice;
-      const sellingPricePerUnit = item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+      // ใช้ราคาที่ส่งมาจาก frontend แทนราคาจากฐานข้อมูลสินค้า - ใช้ averagePurchasePrice
+      const estimatedPrice = item.estimatedPrice || (item.pack ? (product.averagePurchasePrice || 0) * product.packSize : (product.averagePurchasePrice || 0));
+      const sellingPricePerUnit = item.sellingPricePerUnit || (item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit);
 
       // คำนวณ subtotal
-      const subtotal = item.quantity * purchasePrice;
+      const subtotal = item.orderedQuantity * estimatedPrice;
       total += subtotal;
+
+      // เก็บข้อมูลการส่งมอบเดิมไว้
+      const existingProduct = existingPurchaseOrder.products.find(p => p.productId.toString() === item.productId);
+      const deliveredQuantity = item.deliveredQuantity !== undefined ? item.deliveredQuantity : (existingProduct ? existingProduct.deliveredQuantity : 0);
+      const actualPrice = item.actualPrice !== undefined ? item.actualPrice : (existingProduct ? existingProduct.actualPrice : null);
+      const deliveryDate = item.deliveryDate !== undefined ? item.deliveryDate : (existingProduct ? existingProduct.deliveryDate : null);
+      const deliveryNotes = item.deliveryNotes !== undefined ? item.deliveryNotes : (existingProduct ? existingProduct.deliveryNotes : "");
+
+      console.log(`Product ${item.productId} delivery data:`, {
+        deliveredQuantity,
+        actualPrice,
+        deliveryDate,
+        deliveryNotes,
+        fromItem: {
+          deliveredQuantity: item.deliveredQuantity,
+          actualPrice: item.actualPrice,
+          deliveryDate: item.deliveryDate,
+          deliveryNotes: item.deliveryNotes
+        }
+      });
 
       updatedProducts.push({
         productId: item.productId,
         productName: product.productName,
-        quantity: item.quantity,
-        purchasePrice: purchasePrice,
+        orderedQuantity: item.orderedQuantity,
+        estimatedPrice: estimatedPrice,
+        deliveredQuantity: deliveredQuantity,
+        actualPrice: actualPrice,
+        deliveryDate: deliveryDate,
+        deliveryNotes: deliveryNotes,
         sellingPricePerUnit: sellingPricePerUnit,
         expirationDate: item.expirationDate,
         subtotal: subtotal,
@@ -248,7 +426,7 @@ exports.updatePurchaseOrder = async (req, res) => {
       for (let newItem of updatedPurchaseOrder.products) {
         const product = await ProductModel.findById(newItem.productId);
         if (product) {
-          let quantityToAdd = newItem.quantity;
+          let quantityToAdd = newItem.orderedQuantity;
           if (newItem.pack && product.packSize) {
             quantityToAdd *= product.packSize;
           }
@@ -280,7 +458,7 @@ exports.deletePurchaseOrder = async (req, res) => {
       for (let item of purchaseOrder.products) {
         const product = await ProductModel.findById(item.productId);
         if (product) {
-          product.quantity -= item.quantity; // ลดจำนวนที่เติมไปแล้ว
+          product.quantity -= item.orderedQuantity; // ลดจำนวนที่เติมไปแล้ว
           await product.save();
         }
       }
@@ -368,9 +546,9 @@ exports.checkAndAddStock = async (productId) => {
       // คำนวณจำนวนสินค้าที่จะเพิ่ม
       let quantityToAdd;
       if (orderItem.pack && product.packSize) {
-        quantityToAdd = orderItem.quantity * product.packSize;
+        quantityToAdd = orderItem.orderedQuantity * product.packSize;
       } else {
-        quantityToAdd = orderItem.quantity;
+        quantityToAdd = orderItem.orderedQuantity;
       }
 
       // เติมสต็อกสินค้าทั้งหมดในครั้งเดียว
@@ -408,9 +586,9 @@ const checkIfOrderComplete = async (order) => {
       // คำนวณจำนวนสินค้าที่ควรมีในสต็อก
       let expectedQuantity = 0;
       if (item.pack && product.packSize) {
-        expectedQuantity = item.quantity * product.packSize;
+        expectedQuantity = item.orderedQuantity * product.packSize;
       } else {
-        expectedQuantity = item.quantity;
+        expectedQuantity = item.orderedQuantity;
       }
 
       // ถ้าสินค้านี้ยังไม่มีสต็อกที่เพียงพอ (น้อยกว่า expectedQuantity) 
@@ -531,22 +709,33 @@ exports.addAllStockFromOrder = async (orderId) => {
       // คำนวณจำนวนสินค้าที่จะเพิ่ม
       let quantityToAdd;
       if (item.pack && product.packSize) {
-        quantityToAdd = item.quantity * product.packSize;
+        quantityToAdd = item.orderedQuantity * product.packSize;
       } else {
-        quantityToAdd = item.quantity;
+        quantityToAdd = item.orderedQuantity;
       }
 
-      // เติมสต็อกสินค้า
-      const oldQuantity = product.quantity;
-      product.quantity += quantityToAdd;
-      product.expirationDate = item.expirationDate;
-      await product.save();
+      // ใช้ราคาจริงที่ส่งมอบ
+      let actualPurchasePrice = item.actualPrice || item.estimatedPrice;
+      
+      // ถ้าเป็นแพ็ค ให้หารด้วย packSize เพื่อได้ราคาต่อชิ้น
+      if (item.pack && product.packSize && product.packSize > 0) {
+        actualPurchasePrice = actualPurchasePrice / product.packSize;
+        console.log(`Converting pack price to unit price: ${item.actualPrice || item.estimatedPrice} / ${product.packSize} = ${actualPurchasePrice}`);
+      }
+
+      // ✅ สร้างล็อตใหม่แทนการเพิ่ม quantity
+      await product.addLot({
+        quantity: quantityToAdd,
+        purchasePrice: actualPurchasePrice, // ราคาต่อชิ้น
+        expirationDate: item.expirationDate,
+        purchaseOrderId: order._id
+      });
 
       addedProducts.push({
         productName: product.productName,
         addedQuantity: quantityToAdd,
-        oldQuantity,
-        newQuantity: product.quantity
+        purchasePricePerUnit: actualPurchasePrice,
+        newTotal: product.totalQuantity
       });
 
       console.log(`Added ${quantityToAdd} units of ${product.productName} (${oldQuantity} -> ${product.quantity})`);
@@ -611,5 +800,156 @@ exports.autoAddStockForAllZeroStock = async () => {
   } catch (error) {
     console.error("Error in autoAddStockForAllZeroStock:", error);
     throw error;
+  }
+};
+
+// ฟังก์ชันใหม่: อัปเดตใบสั่งซื้อและสร้างล็อตใหม่ (สำหรับแก้ไขข้อมูลการรับสินค้า)
+exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
+  try {
+    const purchaseOrderId = req.params.id;
+    const { products, supplierId, purchaseOrderDate } = req.body;
+
+    console.log('Received update and recreate data:', { products, supplierId, purchaseOrderDate });
+
+    const existingPurchaseOrder = await PurchaseOrderModel.findById(purchaseOrderId);
+    if (!existingPurchaseOrder) {
+      return res.status(404).json({ message: "Purchase order not found" });
+    }
+
+    // ตรวจสอบว่าใบสั่งซื้อเป็น "completed" หรือไม่
+    if (existingPurchaseOrder.status !== "completed") {
+      return res.status(400).json({ message: "This purchase order is not completed yet" });
+    }
+
+    // ลบล็อตเดิมที่สร้างจากใบสั่งซื้อนี้
+    for (let oldItem of existingPurchaseOrder.products) {
+      const product = await ProductModel.findById(oldItem.productId);
+      if (product) {
+        // หาล็อตที่สร้างจากใบสั่งซื้อนี้และลบออก
+        const lotsToRemove = product.lots.filter(lot => 
+          lot.purchaseOrderId && lot.purchaseOrderId.toString() === purchaseOrderId
+        );
+        
+        for (const lot of lotsToRemove) {
+          // ลบล็อตออกจาก array
+          product.lots = product.lots.filter(l => l.lotNumber !== lot.lotNumber);
+        }
+        
+        await product.save();
+        console.log(`Removed ${lotsToRemove.length} lots from product ${product.productName}`);
+      }
+    }
+
+    let total = 0;
+    const updatedProducts = [];
+
+    // อัปเดตข้อมูลสินค้า
+    for (let item of products) {
+      const product = await ProductModel.findById(item.productId);
+      if (!product) {
+        return res.status(404).json({ message: `Product not found for ID: ${item.productId}` });
+      }
+
+      // ใช้ราคาที่ส่งมาจาก frontend
+      const estimatedPrice = item.estimatedPrice || (item.pack ? (product.averagePurchasePrice || 0) * product.packSize : (product.averagePurchasePrice || 0));
+      const sellingPricePerUnit = item.sellingPricePerUnit || (item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit);
+
+      // คำนวณ subtotal
+      const subtotal = item.orderedQuantity * estimatedPrice;
+      total += subtotal;
+
+      // เก็บข้อมูลการส่งมอบเดิมไว้
+      const existingProduct = existingPurchaseOrder.products.find(p => p.productId.toString() === item.productId);
+      const deliveredQuantity = item.deliveredQuantity !== undefined ? item.deliveredQuantity : (existingProduct ? existingProduct.deliveredQuantity : 0);
+      const actualPrice = item.actualPrice !== undefined ? item.actualPrice : (existingProduct ? existingProduct.actualPrice : null);
+      const deliveryDate = item.deliveryDate !== undefined ? item.deliveryDate : (existingProduct ? existingProduct.deliveryDate : null);
+      const deliveryNotes = item.deliveryNotes !== undefined ? item.deliveryNotes : (existingProduct ? existingProduct.deliveryNotes : "");
+
+      updatedProducts.push({
+        productId: item.productId,
+        productName: product.productName,
+        orderedQuantity: item.orderedQuantity,
+        estimatedPrice: estimatedPrice,
+        deliveredQuantity: deliveredQuantity,
+        actualPrice: actualPrice,
+        deliveryDate: deliveryDate,
+        deliveryNotes: deliveryNotes,
+        sellingPricePerUnit: sellingPricePerUnit,
+        expirationDate: item.expirationDate,
+        subtotal: subtotal,
+        pack: item.pack,
+        packSize: item.packSize || product.packSize
+      });
+    }
+
+    // อัปเดตใบสั่งซื้อ
+    const updatedPurchaseOrder = await PurchaseOrderModel.findByIdAndUpdate(
+      purchaseOrderId,
+      {
+        supplierId,
+        purchaseOrderDate,
+        products: updatedProducts,
+        total
+      },
+      { new: true }
+    );
+
+    if (!updatedPurchaseOrder) {
+      return res.status(404).json({ message: "Purchase order not found" });
+    }
+
+    // สร้างล็อตใหม่ตามข้อมูลที่อัปเดต
+    let addedProducts = [];
+    for (let item of updatedPurchaseOrder.products) {
+      const product = await ProductModel.findById(item.productId);
+      if (!product) {
+        continue;
+      }
+
+      // ตรวจสอบว่ามีวันหมดอายุหรือไม่
+      if (!item.expirationDate) {
+        continue;
+      }
+
+      // คำนวณจำนวนสินค้าที่จะเพิ่มเป็นล็อต
+      let quantityToAdd;
+      if (item.pack && product.packSize) {
+        quantityToAdd = (item.deliveredQuantity || item.orderedQuantity) * product.packSize;
+      } else {
+        quantityToAdd = item.deliveredQuantity || item.orderedQuantity;
+      }
+
+      // ใช้ราคาจริงที่ส่งมอบ
+      let actualPurchasePrice = item.actualPrice || item.estimatedPrice;
+      
+      // ถ้าเป็นแพ็ค ให้หารด้วย packSize เพื่อได้ราคาต่อชิ้น
+      if (item.pack && product.packSize && product.packSize > 0) {
+        actualPurchasePrice = actualPurchasePrice / product.packSize;
+      }
+
+      // สร้างล็อตใหม่
+      await product.addLot({
+        quantity: quantityToAdd,
+        purchasePrice: actualPurchasePrice,
+        expirationDate: item.expirationDate,
+        purchaseOrderId: purchaseOrderId
+      });
+
+      addedProducts.push({
+        productName: product.productName,
+        addedQuantity: quantityToAdd,
+        purchasePricePerUnit: actualPurchasePrice,
+        newTotal: product.totalQuantity
+      });
+    }
+
+    res.status(200).json({ 
+      message: "Purchase order updated and lots recreated successfully", 
+      updatedPurchaseOrder,
+      addedProducts
+    });
+  } catch (error) {
+    console.error("Error updating purchase order and recreating lots:", error);
+    res.status(500).json({ message: "Error updating purchase order and recreating lots", error });
   }
 };

@@ -27,9 +27,9 @@ exports.createOrder = async (req, res) => {
         requiredQuantity *= product.packSize;
       }
 
-      // ตรวจสอบจำนวนสินค้าคงเหลือในสต็อก
-      if (product.quantity < requiredQuantity) {
-        return res.status(400).json({ message: `Not enough stock for ${item.productName}` });
+      // ✅ ตรวจสอบจำนวนสินค้าคงเหลือในสต็อกจาก totalQuantity (รวมทุกล็อต)
+      if (product.totalQuantity < requiredQuantity) {
+        return res.status(400).json({ message: `Not enough stock for ${item.productName}. Available: ${product.totalQuantity}, Required: ${requiredQuantity}` });
       }
     }
 
@@ -40,20 +40,20 @@ exports.createOrder = async (req, res) => {
     const appliedPromotions = [];
     
     for (const item of cartItems) {
-      const product = await ProductModel.findById(item.productId);
-      if (!product) {
+      const currentProduct = await ProductModel.findById(item.productId);
+      if (!currentProduct) {
         return res.status(404).json({ message: `Product ${item.productName} not found` });
       }
 
       let requiredQuantity = item.quantity;
       if (item.pack) {
-        requiredQuantity *= product.packSize;
+        requiredQuantity *= currentProduct.packSize;
       }
 
-      // ใช้ราคาทุนจาก ProductModel
+      // ใช้ราคาทุนจาก ProductModel (ใช้ averagePurchasePrice จาก lots)
       const purchasePrice = item.pack 
-        ? product.purchasePrice * product.packSize  // ถ้าเป็นแพ็ค คูณ packSize
-        : product.purchasePrice; // ถ้าเป็นหน่วยเดียว ใช้ราคาปกติ
+        ? (currentProduct.averagePurchasePrice || 0) * currentProduct.packSize  // ถ้าเป็นแพ็ค คูณ packSize
+        : (currentProduct.averagePurchasePrice || 0); // ถ้าเป็นหน่วยเดียว ใช้ราคาปกติ
 
       // ตรวจสอบโปรโมชั่นที่ใช้งานได้
       const currentDate = new Date();
@@ -93,13 +93,38 @@ exports.createOrder = async (req, res) => {
         pack: item.pack,
         originalPrice: item.price,
         discountAmount: itemDiscount,
-        packSize: product.packSize
+        packSize: currentProduct.packSize
       });
 
-      // ตัดสต็อกสินค้า
-      await ProductModel.findByIdAndUpdate(item.productId, {
-        $inc: { quantity: -requiredQuantity },
+      // ✅ ตัดสต็อกสินค้าแบบ FIFO (First In, First Out)
+      const productToReduce = await ProductModel.findById(item.productId);
+      const reductionResult = productToReduce.reduceLotQuantity(requiredQuantity);
+      
+      if (!reductionResult.success) {
+        return res.status(400).json({ 
+          message: `Failed to reduce stock for ${item.productName}. Shortage: ${reductionResult.remainingShortage}` 
+        });
+      }
+      
+      await productToReduce.save();
+      console.log(`Stock reduced for ${item.productName}:`, reductionResult.reductions);
+
+      // ✅ เก็บข้อมูลล็อตที่ใช้ในการขาย
+      const lotsUsed = reductionResult.reductions.map(reduction => {
+        const lot = productToReduce.lots.find(l => l.lotNumber === reduction.lotNumber);
+        return {
+          lotNumber: reduction.lotNumber,
+          quantityTaken: reduction.quantityTaken,
+          purchasePrice: lot.purchasePrice,
+          expirationDate: lot.expirationDate
+        };
       });
+
+      // อัปเดตข้อมูลสินค้าใน products array
+      const productIndex = products.findIndex(p => p.productId === item.productId);
+      if (productIndex !== -1) {
+        products[productIndex].lotsUsed = lotsUsed;
+      }
 
       // ตรวจสอบและเติมสต็อกอัตโนมัติหลังจากตัดสต็อก
       await checkAndAddStock(item.productId);
@@ -173,11 +198,29 @@ exports.deleteOrder = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // คืนสต็อกสินค้า
+    // คืนสต็อกสินค้าตามล็อตที่ใช้
     for (const item of order.products) {
-      await ProductModel.findByIdAndUpdate(item.productId, {
-        $inc: { quantity: item.quantity }
-      });
+      if (item.lotsUsed && item.lotsUsed.length > 0) {
+        // คืนสต็อกตามล็อตที่ใช้ในการขาย
+        for (const lotUsed of item.lotsUsed) {
+          const product = await ProductModel.findById(item.productId);
+          if (product) {
+            const lot = product.lots.find(l => l.lotNumber === lotUsed.lotNumber);
+            if (lot) {
+              lot.quantity += lotUsed.quantityTaken;
+              if (lot.status === 'depleted' && lot.quantity > 0) {
+                lot.status = 'active';
+              }
+              await product.save();
+            }
+          }
+        }
+      } else {
+        // Fallback สำหรับ order เก่าที่ไม่มีข้อมูลล็อต
+        await ProductModel.findByIdAndUpdate(item.productId, {
+          $inc: { quantity: item.quantity }
+        });
+      }
       
       // ตรวจสอบและเติมสต็อกอัตโนมัติหลังจากคืนสต็อก
       await checkAndAddStock(item.productId);
@@ -221,15 +264,25 @@ exports.updateOrderDetail = async (req, res) => {
       let newTotalQuantity = previousPack ? newQuantity * product.packSize : newQuantity;
       let quantityDiff = newTotalQuantity - oldTotalQuantity;
 
-      // ถ้าสต็อกไม่พอ
-      if (quantityDiff > 0 && product.quantity < quantityDiff) {
-        return res.status(400).json({ message: `Not enough stock for ${product.productName}` });
+      // ✅ ถ้าสต็อกไม่พอ (ใช้ totalQuantity)
+      if (quantityDiff > 0 && product.totalQuantity < quantityDiff) {
+        return res.status(400).json({ message: `Not enough stock for ${product.productName}. Available: ${product.totalQuantity}, Required: ${quantityDiff}` });
       }
 
-      // ปรับสต็อกสินค้า
-      await ProductModel.findByIdAndUpdate(productId, {
-        $inc: { quantity: -quantityDiff }
-      });
+      // ✅ ปรับสต็อกสินค้าแบบ FIFO เฉพาะเมื่อต้องตัดเพิ่ม
+      if (quantityDiff > 0) {
+        const reductionResult = product.reduceLotQuantity(quantityDiff);
+        if (!reductionResult.success) {
+          return res.status(400).json({ 
+            message: `Failed to reduce stock for ${product.productName}. Shortage: ${reductionResult.remainingShortage}` 
+          });
+        }
+        await product.save();
+      } else if (quantityDiff < 0) {
+        // ถ้าลดจำนวน ต้องคืนสต็อก (ซับซ้อน - ยังไม่ implement)
+        // TODO: Implement stock return logic
+        return res.status(400).json({ message: "Stock return not implemented yet. Cannot reduce order quantity." });
+      }
 
       // อัปเดตข้อมูลสินค้า (แต่ห้ามแก้ pack)
       oldItem.quantity = newQuantity;
@@ -275,18 +328,36 @@ exports.updateOrderStatus = async (req, res) => {
 
     // ถ้าสถานะเดิมเป็น "ขายสำเร็จ" และจะเปลี่ยนเป็น "ยกเลิก" หรือ "คืนสินค้า"
     if (order.orderStatus === "ขายสำเร็จ" && (orderStatus === "ยกเลิก" || orderStatus === "คืนสินค้า")) {
-      // คืนสต็อกสินค้า
+      // คืนสต็อกสินค้าตามล็อตที่ใช้
       for (const item of order.products) {
-        let quantityToReturn = item.quantity;
-        if (item.pack) {
-          const product = await ProductModel.findById(item.productId);
-          if (product) {
-            quantityToReturn *= product.packSize;
+        if (item.lotsUsed && item.lotsUsed.length > 0) {
+          // คืนสต็อกตามล็อตที่ใช้ในการขาย
+          for (const lotUsed of item.lotsUsed) {
+            const product = await ProductModel.findById(item.productId);
+            if (product) {
+              const lot = product.lots.find(l => l.lotNumber === lotUsed.lotNumber);
+              if (lot) {
+                lot.quantity += lotUsed.quantityTaken;
+                if (lot.status === 'depleted' && lot.quantity > 0) {
+                  lot.status = 'active';
+                }
+                await product.save();
+              }
+            }
           }
+        } else {
+          // Fallback สำหรับ order เก่าที่ไม่มีข้อมูลล็อต
+          let quantityToReturn = item.quantity;
+          if (item.pack) {
+            const product = await ProductModel.findById(item.productId);
+            if (product) {
+              quantityToReturn *= product.packSize;
+            }
+          }
+          await ProductModel.findByIdAndUpdate(item.productId, {
+            $inc: { quantity: quantityToReturn }
+          });
         }
-        await ProductModel.findByIdAndUpdate(item.productId, {
-          $inc: { quantity: quantityToReturn }
-        });
       }
     }
 
@@ -322,13 +393,18 @@ exports.createDisposeOrder = async (req, res) => {
       if (!product) {
         return res.status(404).json({ message: "ไม่พบสินค้าในระบบ" });
       }
-      const purchasePrice = product.purchasePrice;
+      const purchasePrice = product.averagePurchasePrice || 0;
       const productTotal = purchasePrice * item.quantity;
       calculatedSubtotal += productTotal;
-      // ตัดสต็อกสินค้าให้เหลือ 0
-      await ProductModel.findByIdAndUpdate(item.productId, {
-        quantity: 0
-      });
+      
+      // ✅ ตัดจำหน่ายเฉพาะล็อตที่หมดอายุจริง
+      const currentDate = new Date();
+      for (const lot of product.lots.filter(lot => {
+        const expirationDate = new Date(lot.expirationDate);
+        return lot.status === 'active' && lot.quantity > 0 && expirationDate <= currentDate;
+      })) {
+        await product.disposeLot(lot.lotNumber, 'dispose_order');
+      }
       calculatedProducts.push({
         ...item,
         purchasePrice,
@@ -351,5 +427,103 @@ exports.createDisposeOrder = async (req, res) => {
   } catch (error) {
     console.error("Error creating dispose order:", error);
     res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// ✅ ฟังก์ชันใหม่: ดูข้อมูลล็อตที่ใช้ใน order
+exports.getOrderLotDetails = async (req, res) => {
+  try {
+    const order = await OrderModel.findById(req.params.id);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    const lotDetails = order.products.map(item => ({
+      productId: item.productId,
+      productName: item.productName,
+      totalQuantity: item.quantity,
+      lotsUsed: item.lotsUsed || [],
+      totalLotsUsed: item.lotsUsed ? item.lotsUsed.length : 0
+    }));
+
+    res.status(200).json({
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      orderDate: order.orderDate,
+      lotDetails
+    });
+  } catch (error) {
+    console.error("Error getting order lot details:", error);
+    res.status(500).json({ message: "Error retrieving order lot details", error });
+  }
+};
+
+// ✅ ฟังก์ชันใหม่: ดูรายงานการขายตามล็อต
+exports.getSalesReportByLots = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        orderDate: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate)
+        }
+      };
+    }
+
+    const orders = await OrderModel.find({
+      orderStatus: "ขายสำเร็จ",
+      ...dateFilter
+    });
+
+    const lotSalesReport = {};
+
+    orders.forEach(order => {
+      order.products.forEach(item => {
+        if (item.lotsUsed && item.lotsUsed.length > 0) {
+          item.lotsUsed.forEach(lotUsed => {
+            if (!lotSalesReport[lotUsed.lotNumber]) {
+              lotSalesReport[lotUsed.lotNumber] = {
+                lotNumber: lotUsed.lotNumber,
+                totalQuantitySold: 0,
+                totalRevenue: 0,
+                averageSellingPrice: 0,
+                purchasePrice: lotUsed.purchasePrice,
+                expirationDate: lotUsed.expirationDate,
+                orders: []
+              };
+            }
+
+            lotSalesReport[lotUsed.lotNumber].totalQuantitySold += lotUsed.quantityTaken;
+            lotSalesReport[lotUsed.lotNumber].totalRevenue += lotUsed.quantityTaken * item.sellingPricePerUnit;
+            lotSalesReport[lotUsed.lotNumber].orders.push({
+              orderId: order._id,
+              orderDate: order.orderDate,
+              quantitySold: lotUsed.quantityTaken,
+              sellingPrice: item.sellingPricePerUnit
+            });
+          });
+        }
+      });
+    });
+
+    // คำนวณราคาขายเฉลี่ย
+    Object.values(lotSalesReport).forEach(lot => {
+      lot.averageSellingPrice = lot.totalQuantitySold > 0 ? lot.totalRevenue / lot.totalQuantitySold : 0;
+    });
+
+    res.status(200).json({
+      report: Object.values(lotSalesReport),
+      summary: {
+        totalLots: Object.keys(lotSalesReport).length,
+        totalQuantitySold: Object.values(lotSalesReport).reduce((sum, lot) => sum + lot.totalQuantitySold, 0),
+        totalRevenue: Object.values(lotSalesReport).reduce((sum, lot) => sum + lot.totalRevenue, 0)
+      }
+    });
+  } catch (error) {
+    console.error("Error generating sales report by lots:", error);
+    res.status(500).json({ message: "Error generating sales report", error });
   }
 };

@@ -15,32 +15,34 @@ exports.getAllCarts = async (req, res) => {
 
 // 📌 POST /carts - เพิ่มสินค้าไปยังตะกร้า
 exports.createCart = async (req, res) => {
-  const { productId, quantity, userName, pack } = req.body;
-  console.log("Received data:", req.body);
-
-  if (!productId || !quantity || !userName || pack === undefined) {
-    return res.status(400).json({ message: "Product information is missing!" });
-  }
-
   try {
-    // ค้นหาข้อมูลสินค้าโดยใช้ productId
-    const product = await ProductModel.findById(productId);
-    
-    if (!product) {
-      return res.status(404).json({ message: "Product not found!" });
+    const { productId, quantity, pack, userName } = req.body;
+
+    // ตรวจสอบข้อมูลที่จำเป็น
+    if (!productId || !quantity || !userName) {
+      return res.status(400).json({ message: 'กรุณาระบุข้อมูลที่จำเป็น' });
     }
 
-    // ตรวจสอบว่าสินค้าหมดอายุหรือไม่
+    // ค้นหาสินค้า
+    const product = await ProductModel.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: 'ไม่พบสินค้า' });
+    }
+
+    // ตรวจสอบวันหมดอายุ (ใช้ข้อมูลจาก lots)
     const now = new Date();
-    if (product.expirationDate && product.expirationDate <= now) {
+    const activeLots = product.lots.filter(lot => lot.status === 'active');
+    const hasExpiredLots = activeLots.some(lot => lot.expirationDate <= now);
+    
+    if (hasExpiredLots) {
       return res.status(400).json({ message: 'ไม่สามารถเพิ่มสินค้าหมดอายุเข้าตะกร้าได้' });
     }
 
-    // ตรวจสอบจำนวนสินค้าในสต็อก
+    // ตรวจสอบจำนวนสินค้าในสต็อก (ใช้ totalQuantity)
     const requestedQuantity = pack ? quantity * product.packSize : quantity;
-    if (requestedQuantity > product.quantity) {
+    if (requestedQuantity > product.totalQuantity) {
       return res.status(400).json({ 
-        message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าคงเหลือ ${product.quantity} ${pack ? 'แพ็ค' : 'ชิ้น'}`
+        message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าคงเหลือ ${product.totalQuantity} ${pack ? 'แพ็ค' : 'ชิ้น'}`
       });
     }
 
@@ -56,9 +58,9 @@ exports.createCart = async (req, res) => {
         (existingItem.quantity + quantity) * product.packSize : 
         existingItem.quantity + quantity;
 
-      if (newTotalQuantity > product.quantity) {
+      if (newTotalQuantity > product.totalQuantity) {
         return res.status(400).json({ 
-          message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าคงเหลือ ${product.quantity} ${pack ? 'แพ็ค' : 'ชิ้น'}`
+          message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าคงเหลือ ${product.totalQuantity} ${pack ? 'แพ็ค' : 'ชิ้น'}`
         });
       }
 
@@ -134,58 +136,33 @@ exports.deleteAllCarts = async (req, res) => {
         return res.status(404).json({ message: 'ไม่พบสินค้าในตะกร้า' });
       }
 
-      // ค้นหาสินค้า
+      // ค้นหาสินค้าเพื่อตรวจสอบสต็อก
       const product = await ProductModel.findById(cart.productId);
       if (!product) {
         return res.status(404).json({ message: 'ไม่พบสินค้า' });
       }
 
-      // ตรวจสอบว่าสินค้าหมดอายุหรือไม่
-      const now = new Date();
-      if (product.expirationDate && product.expirationDate <= now) {
-        return res.status(400).json({ message: 'ไม่สามารถเพิ่มสินค้าหมดอายุเข้าตะกร้าได้' });
-      }
-
-      // คำนวณจำนวนที่ต้องการ
-      let requestedQuantity = quantity;
-      if (pack !== undefined) {
-        // ถ้าเปลี่ยนเป็นแพ็ค
-        if (pack) {
-          // คำนวณจำนวนชิ้นที่ต้องการจากจำนวนแพ็ค
-          requestedQuantity = quantity * product.packSize;
-        } else {
-          // ถ้าเปลี่ยนเป็นชิ้น
-          // คำนวณจำนวนชิ้นที่ต้องการจากจำนวนแพ็คเดิม
-          requestedQuantity = Math.ceil(quantity / product.packSize);
-        }
-      }
-
-      // ตรวจสอบจำนวนสินค้า
-      if (requestedQuantity > product.quantity) {
+      // ตรวจสอบจำนวนสินค้าในสต็อก (ใช้ totalQuantity)
+      const requestedQuantity = pack ? quantity * product.packSize : quantity;
+      if (requestedQuantity > product.totalQuantity) {
         return res.status(400).json({ 
-          message: `ไม่สามารถอัพเดทสินค้าได้ จำนวนสินค้าคงเหลือ ${product.quantity} ${pack ? 'ชิ้น' : 'แพ็ค'}`
+          message: `ไม่สามารถอัพเดทสินค้าได้ จำนวนสินค้าคงเหลือ ${product.totalQuantity} ${pack ? 'ชิ้น' : 'แพ็ค'}`
         });
       }
 
       // อัพเดทข้อมูล
-      const updateData = {};
-      if (quantity !== undefined) updateData.quantity = quantity;
+      if (quantity !== undefined) {
+        cart.quantity = quantity;
+      }
       if (pack !== undefined) {
-        updateData.pack = pack;
-        // อัพเดทราคาตามประเภทการขาย
-        updateData.price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+        cart.pack = pack;
       }
 
-      const updatedCart = await CartModel.findByIdAndUpdate(
-        id,
-        updateData,
-        { new: true }
-      ).populate('productId');
-
+      const updatedCart = await cart.save();
       res.json(updatedCart);
     } catch (error) {
-      console.error('Error updating cart:', error);
-      res.status(500).json({ message: 'เกิดข้อผิดพลาดในการอัพเดทตะกร้า' });
+      console.error("Error updating cart:", error);
+      res.status(500).json({ message: error.message || "Something went wrong!" });
     }
   };
   
@@ -233,9 +210,9 @@ exports.deleteCartById = async (req, res) => {
 
       // ตรวจสอบจำนวนสินค้าในสต็อก
       const requestedQuantity = pack ? quantity * product.packSize : quantity;
-      if (requestedQuantity > product.quantity) {
+      if (requestedQuantity > product.totalQuantity) {
         return res.status(400).json({ 
-          message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าในสต็อกมีเพียง ${product.quantity} ${pack ? 'ชิ้น' : 'หน่วย'}`
+          message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าในสต็อกมีเพียง ${product.totalQuantity} ${pack ? 'ชิ้น' : 'หน่วย'}`
         });
       }
 
@@ -250,9 +227,9 @@ exports.deleteCartById = async (req, res) => {
           (existingItem.quantity + quantity) * product.packSize : 
           existingItem.quantity + quantity;
 
-        if (newTotalQuantity > product.quantity) {
+        if (newTotalQuantity > product.totalQuantity) {
           return res.status(400).json({ 
-            message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าในสต็อกมีเพียง ${product.quantity} ${pack ? 'ชิ้น' : 'หน่วย'}`
+            message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าในสต็อกมีเพียง ${product.totalQuantity} ${pack ? 'ชิ้น' : 'หน่วย'}`
           });
         }
 
