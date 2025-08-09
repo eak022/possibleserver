@@ -12,16 +12,18 @@ const ProductSchema = new Schema({
     barcodeUnit: { type: String, unique: true },
     
     // ✅ ระบบล็อตใหม่ - เก็บข้อมูลแยกตามล็อต
-    lots: [{
-        lotNumber: { type: String, required: true }, // เลขล็อต (auto-generated)
-        quantity: { type: Number, required: true },   // จำนวนในล็อตนี้
-        purchasePrice: { type: Number, required: true }, // ราคาซื้อล็อตนี้
-        expirationDate: { type: Date, required: true },  // วันหมดอายุล็อตนี้
-        receivedDate: { type: Date, default: Date.now },  // วันที่รับสินค้า
-        purchaseOrderId: { type: Schema.Types.ObjectId, ref: "PurchaseOrder" }, // อ้างอิงใบสั่งซื้อ
-        status: { type: String, enum: ["active", "expired", "disposed", "depleted"], default: "active" }
-    }],
-    
+    lots: {
+        type: [{
+            lotNumber: { type: String, required: true }, // เลขล็อต (auto-generated)
+            quantity: { type: Number, required: true },   // จำนวนในล็อตนี้
+            purchasePrice: { type: Number, required: true }, // ราคาซื้อล็อตนี้
+            expirationDate: { type: Date, required: true },  // วันหมดอายุล็อตนี้
+            receivedDate: { type: Date, default: Date.now },  // วันที่รับสินค้า
+            purchaseOrderId: { type: Schema.Types.ObjectId, ref: "PurchaseOrder" }, // อ้างอิงใบสั่งซื้อ
+            status: { type: String, enum: ["active", "expired", "disposed", "depleted"], default: "active" }
+        }],
+        default: []
+    },
     // ข้อมูลราคาขาย (ใช้ร่วมกันทุกล็อต)
     sellingPricePerUnit: { type: Number, required: true },
     sellingPricePerPack: { type: Number, required: true },
@@ -34,19 +36,22 @@ const ProductSchema = new Schema({
 
 // ✅ Virtual fields สำหรับคำนวณข้อมูลจาก lots
 ProductSchema.virtual('totalQuantity').get(function() {
-    return this.lots
+    const lots = Array.isArray(this.lots) ? this.lots : [];
+    return lots
         .filter(lot => lot.status === 'active' && lot.quantity > 0)
         .reduce((total, lot) => total + lot.quantity, 0);
 });
 
 ProductSchema.virtual('nearestExpirationDate').get(function() {
-    const activeLots = this.lots.filter(lot => lot.status === 'active');
+    const lots = Array.isArray(this.lots) ? this.lots : [];
+    const activeLots = lots.filter(lot => lot.status === 'active');
     if (activeLots.length === 0) return null;
     return new Date(Math.min(...activeLots.map(lot => lot.expirationDate)));
 });
 
 ProductSchema.virtual('averagePurchasePrice').get(function() {
-    const activeLots = this.lots.filter(lot => lot.status === 'active');
+    const lots = Array.isArray(this.lots) ? this.lots : [];
+    const activeLots = lots.filter(lot => lot.status === 'active');
     if (activeLots.length === 0) return 0;
     const totalValue = activeLots.reduce((sum, lot) => sum + (lot.quantity * lot.purchasePrice), 0);
     const totalQuantity = activeLots.reduce((sum, lot) => sum + lot.quantity, 0);
