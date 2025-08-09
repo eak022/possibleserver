@@ -15,7 +15,8 @@ const {
   disposeLot,
   checkStockAvailability,
   updateLotDetails,
-  updateLotComplete
+  updateLotComplete,
+  generateInternalBarcode
 } = require("../controllers/product.controller");
 const { upload } = require("../middlewares/upload");
 const updateProductStatus = require("../middlewares/productStatusMiddleware");
@@ -31,6 +32,9 @@ router.get("/:id", getProductById);
 router.patch("/:id/image", upload.single("productImage"), updateProductImage);
 router.put("/:id", upload.single("productImage"), updateProductData);
 router.delete("/:id", deleteProductById);
+
+// ✅ Barcode generation (ภายในร้าน)
+router.post("/generate-barcode", generateInternalBarcode);
 
 // ✅ Lot management routes (ใหม่)
 router.post("/:productId/lots", addLotToProduct);                    // เพิ่มล็อตใหม่

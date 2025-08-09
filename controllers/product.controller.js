@@ -1,6 +1,14 @@
 const ProductModel = require("../models/Product");
 const cloudinary = require("../utils/cloudinary"); 
 
+// ✅ Helper: คำนวณเลขตรวจสอบ EAN-13 (check digit)
+function calculateEan13CheckDigit(twelveDigits) {
+  const digits = twelveDigits.split("").map(Number);
+  const sum = digits.reduce((acc, digit, index) => acc + digit * (index % 2 === 0 ? 1 : 3), 0);
+  const mod = sum % 10;
+  return mod === 0 ? 0 : 10 - mod;
+}
+
 // 📌 CREATE: สร้างสินค้าใหม่ (แบบระบบล็อต)
 exports.createProduct = async (req, res) => {
   try {
@@ -9,14 +17,23 @@ exports.createProduct = async (req, res) => {
           productDescription, 
           categoryId, 
           packSize, 
-          productStatus, 
+          productStatuses, 
           barcodePack, 
           barcodeUnit, 
           sellingPricePerUnit, 
-          sellingPricePerPack,
-          // ✅ ข้อมูลล็อตแรก (optional - อาจจะไม่มีสต็อกตอนสร้าง)
-          initialLot
+          sellingPricePerPack
       } = req.body;
+
+      // ✅ จัดการข้อมูลล็อตแรกจาก FormData
+      let initialLot = null;
+      if (req.body['initialLot[quantity]'] && req.body['initialLot[quantity]'] > 0) {
+          initialLot = {
+              quantity: req.body['initialLot[quantity]'],
+              purchasePrice: req.body['initialLot[purchasePrice]'],
+              expirationDate: req.body['initialLot[expirationDate]'],
+              lotNumber: req.body['initialLot[lotNumber]'] || null
+          };
+      }
 
       if (!req.file) {
           return res.status(400).json({ message: "Please upload a product image" });
@@ -48,13 +65,18 @@ exports.createProduct = async (req, res) => {
         }
       }
 
+      // ✅ ไม่อนุญาตให้ barcodePack และ barcodeUnit ของสินค้าเดียวกันซ้ำกัน
+      if (barcodePack && barcodeUnit && barcodePack === barcodeUnit) {
+        return res.status(400).json({ message: "บาร์โค้ดแพ็คและบาร์โค้ดชิ้นต้องไม่ซ้ำกันในสินค้าเดียวกัน" });
+      }
+
       const newProduct = new ProductModel({
           productName,
           productDescription,
           productImage: req.file.path,
           categoryId,
           packSize,
-          productStatus,
+          productStatuses: productStatuses ? [productStatuses] : [], // แปลงเป็น array
           barcodePack,
           barcodeUnit,
           sellingPricePerUnit,
@@ -64,12 +86,15 @@ exports.createProduct = async (req, res) => {
 
       // ✅ ถ้ามีข้อมูลล็อตแรก ให้เพิ่มเข้าไป
       if (initialLot && initialLot.quantity > 0) {
-          await newProduct.addLot({
-              quantity: initialLot.quantity,
-              purchasePrice: initialLot.purchasePrice,
-              expirationDate: initialLot.expirationDate,
-              lotNumber: initialLot.lotNumber
-          });
+          // แปลงข้อมูลให้เป็นตัวเลข
+          const lotData = {
+              quantity: Number(initialLot.quantity),
+              purchasePrice: Number(initialLot.purchasePrice),
+              expirationDate: new Date(initialLot.expirationDate),
+              lotNumber: initialLot.lotNumber || undefined
+          };
+          
+          await newProduct.addLot(lotData);
       } else {
           await newProduct.save();
       }
@@ -79,10 +104,55 @@ exports.createProduct = async (req, res) => {
           product: newProduct 
       });
   } catch (error) {
+      console.error("Error creating product:", error);
       if (error.code === 11000) {
         return res.status(400).json({ message: "ข้อมูลซ้ำในระบบ (ชื่อหรือบาร์โค้ด)" });
       }
-      return res.status(500).json({ message: error.message });
+      if (error.name === 'ValidationError') {
+        return res.status(400).json({ message: "ข้อมูลไม่ถูกต้อง: " + error.message });
+      }
+      return res.status(500).json({ message: "เกิดข้อผิดพลาดในการสร้างสินค้า: " + error.message });
+  }
+};
+
+// 📌 GENERATE: สร้างบาร์โค้ดภายในร้านแบบ EAN-13 (prefix 20–29)
+// Pattern 12 หลัก: 20 + สาขา(2) + ประเภท(1:unit,2:pack) + YYMM(4) + running(3) → คำนวณ checksum เป็นหลักที่ 13
+exports.generateInternalBarcode = async (req, res) => {
+  try {
+    const { type, storeId } = req.body || {};
+
+    if (!type || !["unit", "pack"].includes(type)) {
+      return res.status(400).json({ message: "Invalid type. Must be 'unit' or 'pack'" });
+    }
+
+    const prefix = "20"; // ช่วงสำหรับใช้งานภายในร้าน
+    const branchCode = (storeId || "00").toString().padStart(2, "0");
+    const typeDigit = type === "unit" ? "1" : "2";
+    const now = new Date();
+    const yy = now.getFullYear().toString().slice(-2);
+    const mm = (now.getMonth() + 1).toString().padStart(2, "0");
+    const yymm = `${yy}${mm}`;
+
+    // ลองวิ่งลำดับ 000–999 หาเลขที่ไม่ชนใน DB
+    for (let running = 0; running <= 999; running += 1) {
+      const seq = running.toString().padStart(3, "0");
+      const twelve = `${prefix}${branchCode}${typeDigit}${yymm}${seq}`; // รวมได้ 12 หลัก
+      const check = calculateEan13CheckDigit(twelve);
+      const code13 = `${twelve}${check}`;
+
+      const exists = await ProductModel.findOne({
+        $or: [{ barcodePack: code13 }, { barcodeUnit: code13 }],
+      }).lean();
+
+      if (!exists) {
+        return res.status(200).json({ barcode: code13 });
+      }
+    }
+
+    // ถ้าหมดช่วงรันนิ่ง 000–999 ในเดือนนี้ ให้แจ้งเตือนให้เปลี่ยนเดือน/สาขาหรือใช้วิธีอื่น
+    return res.status(409).json({ message: "ไม่สามารถสร้างบาร์โค้ดใหม่ได้ในช่วงรันของเดือนนี้ (000–999 เต็ม)" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message || "Server error while generating barcode" });
   }
 };
 
@@ -174,6 +244,17 @@ exports.updateProductData = async (req, res) => {
       if (nameExists) {
         return res.status(400).json({ message: "มีสินค้าชื่อนี้อยู่ในระบบแล้ว" });
       }
+    }
+
+    // ✅ ไม่อนุญาตให้ barcodePack และ barcodeUnit ของสินค้าเดียวกันซ้ำกัน (case: อัปเดตสองฟิลด์พร้อมกันหรือฟิลด์เดียวให้เท่ากับอีกฟิลด์เดิม)
+    const currentProduct = await ProductModel.findById(id);
+    if (!currentProduct) {
+      return res.status(404).json({ message: "ไม่พบสินค้า" });
+    }
+    const nextBarcodePack = updateData.barcodePack !== undefined ? updateData.barcodePack : currentProduct.barcodePack;
+    const nextBarcodeUnit = updateData.barcodeUnit !== undefined ? updateData.barcodeUnit : currentProduct.barcodeUnit;
+    if (nextBarcodePack && nextBarcodeUnit && nextBarcodePack === nextBarcodeUnit) {
+      return res.status(400).json({ message: "บาร์โค้ดแพ็คและบาร์โค้ดชิ้นต้องไม่ซ้ำกันในสินค้าเดียวกัน" });
     }
     // ตรวจสอบ barcodePack ซ้ำกับ barcodePack หรือ barcodeUnit ของสินค้าอื่น (ยกเว้นตัวเอง)
     if (updateData.barcodePack) {

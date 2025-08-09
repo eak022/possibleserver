@@ -107,12 +107,18 @@ exports.receiveStockFromDelivery = async (req, res) => {
       }
 
       // ใช้ราคาจริงที่ส่งมอบ
-      const actualPurchasePrice = item.actualPrice || item.estimatedPrice;
+      let actualPurchasePrice = item.actualPrice || item.estimatedPrice;
+      
+      // ถ้าเป็นแพ็ค ให้หารด้วย packSize เพื่อได้ราคาต่อชิ้น
+      if (item.pack && product.packSize && product.packSize > 0) {
+        actualPurchasePrice = actualPurchasePrice / product.packSize;
+        console.log(`Converting pack price to unit price: ${item.actualPrice || item.estimatedPrice} / ${product.packSize} = ${actualPurchasePrice}`);
+      }
 
       // ✅ สร้างล็อตใหม่แทนการเพิ่ม quantity
       await product.addLot({
         quantity: quantityToAdd,
-        purchasePrice: actualPurchasePrice,
+        purchasePrice: actualPurchasePrice, // ราคาต่อชิ้น
         expirationDate: item.expirationDate,
         purchaseOrderId: purchaseOrderId
       });
@@ -124,7 +130,7 @@ exports.receiveStockFromDelivery = async (req, res) => {
         productName: product.productName,
         deliveredQuantity: deliveredQuantity,
         addedQuantity: quantityToAdd,
-        actualPrice: actualPurchasePrice,
+        purchasePricePerUnit: actualPurchasePrice,
         newTotal: product.totalQuantity
       });
     }
@@ -186,10 +192,19 @@ exports.receiveStock = async (req, res) => {
         console.log(`Adding units: ${quantityToAdd} units`);
       }
 
+      // ใช้ราคาจริงที่ส่งมอบ
+      let actualPurchasePrice = item.actualPrice || item.estimatedPrice;
+      
+      // ถ้าเป็นแพ็ค ให้หารด้วย packSize เพื่อได้ราคาต่อชิ้น
+      if (item.pack && product.packSize && product.packSize > 0) {
+        actualPurchasePrice = actualPurchasePrice / product.packSize;
+        console.log(`Converting pack price to unit price: ${item.actualPrice || item.estimatedPrice} / ${product.packSize} = ${actualPurchasePrice}`);
+      }
+
       // ✅ สร้างล็อตใหม่แทนการเพิ่ม quantity
       await product.addLot({
         quantity: quantityToAdd,
-        purchasePrice: item.actualPrice || item.estimatedPrice,
+        purchasePrice: actualPurchasePrice, // ราคาต่อชิ้น
         expirationDate: item.expirationDate,
         purchaseOrderId: purchaseOrderId
       });
@@ -200,6 +215,7 @@ exports.receiveStock = async (req, res) => {
       addedProducts.push({
         productName: product.productName,
         addedQuantity: quantityToAdd,
+        purchasePricePerUnit: actualPurchasePrice,
         newTotal: product.totalQuantity
       });
     }
@@ -698,17 +714,28 @@ exports.addAllStockFromOrder = async (orderId) => {
         quantityToAdd = item.orderedQuantity;
       }
 
-      // เติมสต็อกสินค้า
-      const oldQuantity = product.quantity;
-      product.quantity += quantityToAdd;
-      product.expirationDate = item.expirationDate;
-      await product.save();
+      // ใช้ราคาจริงที่ส่งมอบ
+      let actualPurchasePrice = item.actualPrice || item.estimatedPrice;
+      
+      // ถ้าเป็นแพ็ค ให้หารด้วย packSize เพื่อได้ราคาต่อชิ้น
+      if (item.pack && product.packSize && product.packSize > 0) {
+        actualPurchasePrice = actualPurchasePrice / product.packSize;
+        console.log(`Converting pack price to unit price: ${item.actualPrice || item.estimatedPrice} / ${product.packSize} = ${actualPurchasePrice}`);
+      }
+
+      // ✅ สร้างล็อตใหม่แทนการเพิ่ม quantity
+      await product.addLot({
+        quantity: quantityToAdd,
+        purchasePrice: actualPurchasePrice, // ราคาต่อชิ้น
+        expirationDate: item.expirationDate,
+        purchaseOrderId: order._id
+      });
 
       addedProducts.push({
         productName: product.productName,
         addedQuantity: quantityToAdd,
-        oldQuantity,
-        newQuantity: product.quantity
+        purchasePricePerUnit: actualPurchasePrice,
+        newTotal: product.totalQuantity
       });
 
       console.log(`Added ${quantityToAdd} units of ${product.productName} (${oldQuantity} -> ${product.quantity})`);
@@ -773,5 +800,156 @@ exports.autoAddStockForAllZeroStock = async () => {
   } catch (error) {
     console.error("Error in autoAddStockForAllZeroStock:", error);
     throw error;
+  }
+};
+
+// ฟังก์ชันใหม่: อัปเดตใบสั่งซื้อและสร้างล็อตใหม่ (สำหรับแก้ไขข้อมูลการรับสินค้า)
+exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
+  try {
+    const purchaseOrderId = req.params.id;
+    const { products, supplierId, purchaseOrderDate } = req.body;
+
+    console.log('Received update and recreate data:', { products, supplierId, purchaseOrderDate });
+
+    const existingPurchaseOrder = await PurchaseOrderModel.findById(purchaseOrderId);
+    if (!existingPurchaseOrder) {
+      return res.status(404).json({ message: "Purchase order not found" });
+    }
+
+    // ตรวจสอบว่าใบสั่งซื้อเป็น "completed" หรือไม่
+    if (existingPurchaseOrder.status !== "completed") {
+      return res.status(400).json({ message: "This purchase order is not completed yet" });
+    }
+
+    // ลบล็อตเดิมที่สร้างจากใบสั่งซื้อนี้
+    for (let oldItem of existingPurchaseOrder.products) {
+      const product = await ProductModel.findById(oldItem.productId);
+      if (product) {
+        // หาล็อตที่สร้างจากใบสั่งซื้อนี้และลบออก
+        const lotsToRemove = product.lots.filter(lot => 
+          lot.purchaseOrderId && lot.purchaseOrderId.toString() === purchaseOrderId
+        );
+        
+        for (const lot of lotsToRemove) {
+          // ลบล็อตออกจาก array
+          product.lots = product.lots.filter(l => l.lotNumber !== lot.lotNumber);
+        }
+        
+        await product.save();
+        console.log(`Removed ${lotsToRemove.length} lots from product ${product.productName}`);
+      }
+    }
+
+    let total = 0;
+    const updatedProducts = [];
+
+    // อัปเดตข้อมูลสินค้า
+    for (let item of products) {
+      const product = await ProductModel.findById(item.productId);
+      if (!product) {
+        return res.status(404).json({ message: `Product not found for ID: ${item.productId}` });
+      }
+
+      // ใช้ราคาที่ส่งมาจาก frontend
+      const estimatedPrice = item.estimatedPrice || (item.pack ? (product.averagePurchasePrice || 0) * product.packSize : (product.averagePurchasePrice || 0));
+      const sellingPricePerUnit = item.sellingPricePerUnit || (item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit);
+
+      // คำนวณ subtotal
+      const subtotal = item.orderedQuantity * estimatedPrice;
+      total += subtotal;
+
+      // เก็บข้อมูลการส่งมอบเดิมไว้
+      const existingProduct = existingPurchaseOrder.products.find(p => p.productId.toString() === item.productId);
+      const deliveredQuantity = item.deliveredQuantity !== undefined ? item.deliveredQuantity : (existingProduct ? existingProduct.deliveredQuantity : 0);
+      const actualPrice = item.actualPrice !== undefined ? item.actualPrice : (existingProduct ? existingProduct.actualPrice : null);
+      const deliveryDate = item.deliveryDate !== undefined ? item.deliveryDate : (existingProduct ? existingProduct.deliveryDate : null);
+      const deliveryNotes = item.deliveryNotes !== undefined ? item.deliveryNotes : (existingProduct ? existingProduct.deliveryNotes : "");
+
+      updatedProducts.push({
+        productId: item.productId,
+        productName: product.productName,
+        orderedQuantity: item.orderedQuantity,
+        estimatedPrice: estimatedPrice,
+        deliveredQuantity: deliveredQuantity,
+        actualPrice: actualPrice,
+        deliveryDate: deliveryDate,
+        deliveryNotes: deliveryNotes,
+        sellingPricePerUnit: sellingPricePerUnit,
+        expirationDate: item.expirationDate,
+        subtotal: subtotal,
+        pack: item.pack,
+        packSize: item.packSize || product.packSize
+      });
+    }
+
+    // อัปเดตใบสั่งซื้อ
+    const updatedPurchaseOrder = await PurchaseOrderModel.findByIdAndUpdate(
+      purchaseOrderId,
+      {
+        supplierId,
+        purchaseOrderDate,
+        products: updatedProducts,
+        total
+      },
+      { new: true }
+    );
+
+    if (!updatedPurchaseOrder) {
+      return res.status(404).json({ message: "Purchase order not found" });
+    }
+
+    // สร้างล็อตใหม่ตามข้อมูลที่อัปเดต
+    let addedProducts = [];
+    for (let item of updatedPurchaseOrder.products) {
+      const product = await ProductModel.findById(item.productId);
+      if (!product) {
+        continue;
+      }
+
+      // ตรวจสอบว่ามีวันหมดอายุหรือไม่
+      if (!item.expirationDate) {
+        continue;
+      }
+
+      // คำนวณจำนวนสินค้าที่จะเพิ่มเป็นล็อต
+      let quantityToAdd;
+      if (item.pack && product.packSize) {
+        quantityToAdd = (item.deliveredQuantity || item.orderedQuantity) * product.packSize;
+      } else {
+        quantityToAdd = item.deliveredQuantity || item.orderedQuantity;
+      }
+
+      // ใช้ราคาจริงที่ส่งมอบ
+      let actualPurchasePrice = item.actualPrice || item.estimatedPrice;
+      
+      // ถ้าเป็นแพ็ค ให้หารด้วย packSize เพื่อได้ราคาต่อชิ้น
+      if (item.pack && product.packSize && product.packSize > 0) {
+        actualPurchasePrice = actualPurchasePrice / product.packSize;
+      }
+
+      // สร้างล็อตใหม่
+      await product.addLot({
+        quantity: quantityToAdd,
+        purchasePrice: actualPurchasePrice,
+        expirationDate: item.expirationDate,
+        purchaseOrderId: purchaseOrderId
+      });
+
+      addedProducts.push({
+        productName: product.productName,
+        addedQuantity: quantityToAdd,
+        purchasePricePerUnit: actualPurchasePrice,
+        newTotal: product.totalQuantity
+      });
+    }
+
+    res.status(200).json({ 
+      message: "Purchase order updated and lots recreated successfully", 
+      updatedPurchaseOrder,
+      addedProducts
+    });
+  } catch (error) {
+    console.error("Error updating purchase order and recreating lots:", error);
+    res.status(500).json({ message: "Error updating purchase order and recreating lots", error });
   }
 };

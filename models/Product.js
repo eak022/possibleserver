@@ -35,7 +35,7 @@ const ProductSchema = new Schema({
 // ✅ Virtual fields สำหรับคำนวณข้อมูลจาก lots
 ProductSchema.virtual('totalQuantity').get(function() {
     return this.lots
-        .filter(lot => lot.status === 'active')
+        .filter(lot => lot.status === 'active' && lot.quantity > 0)
         .reduce((total, lot) => total + lot.quantity, 0);
 });
 

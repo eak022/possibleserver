@@ -4,7 +4,7 @@ const OrderModel = require('../models/Order');
 
 const updateProductStatus = async (req, res, next) => {
     try {
-        const products = await ProductModel.find().populate('productStatuses');
+        const products = await ProductModel.find().populate('productStatuses').populate('lots');
         const now = new Date();
         const sevenDaysFromNow = new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000));
 
@@ -20,6 +20,10 @@ const updateProductStatus = async (req, res, next) => {
 
         for (const product of products) {
             let newStatuses = [];
+
+            // Debug: แสดงข้อมูลล็อตของสินค้า
+            const activeLots = product.lots.filter(lot => lot.status === 'active' && lot.quantity > 0);
+            console.log(`Product ${product.productName}: Active lots: ${activeLots.length}, Total quantity: ${product.totalQuantity}`);
 
             // ตรวจสอบว่าสินค้าเป็นเลิกขายหรือไม่
             const isDiscontinued = product.productStatuses.some(status => 
@@ -39,10 +43,11 @@ const updateProductStatus = async (req, res, next) => {
                 } else if (product.nearestExpirationDate && product.nearestExpirationDate <= now) {
                     newStatuses = [expiredStatus]; // ถ้าหมดอายุแล้ว ให้มีแค่สถานะหมดอายุอย่างเดียว (แต่สินค้าต้องไม่หมด)
                 } else {
-                    // ตรวจสอบสินค้าใกล้หมด
-                    if (product.totalQuantity < 5) {
-                        newStatuses.push(lowStockStatus);
-                    }
+                                    // ตรวจสอบสินค้าใกล้หมด
+                if (product.totalQuantity < 5) {
+                    newStatuses.push(lowStockStatus);
+                    console.log(`Product ${product.productName}: Low stock detected - Total quantity: ${product.totalQuantity}`);
+                }
 
                     // ตรวจสอบสินค้าใกล้หมดอายุ (เฉพาะสินค้าที่ยังไม่หมดอายุ)
                     if (product.nearestExpirationDate && product.nearestExpirationDate <= sevenDaysFromNow) {
@@ -56,6 +61,7 @@ const updateProductStatus = async (req, res, next) => {
             const newStatusIds = newStatuses.map(status => status._id.toString());
             
             if (JSON.stringify(currentStatusIds.sort()) !== JSON.stringify(newStatusIds.sort())) {
+                console.log(`Product ${product.productName}: Status updated from [${product.productStatuses.map(s => s.statusName).join(', ')}] to [${newStatuses.map(s => s.statusName).join(', ')}]`);
                 await ProductModel.findByIdAndUpdate(product._id, { 
                     productStatuses: newStatuses.map(status => status._id)
                 });
