@@ -73,34 +73,40 @@ ProductSchema.methods.addLot = function(lotData) {
     return this.save();
 };
 
-ProductSchema.methods.reduceLotQuantity = function(requiredQuantity) {
-    // FIFO - ตัดจากล็อตที่หมดอายุเร็วสุดก่อน
-    const activeLots = this.lots
+ProductSchema.methods.reduceLotQuantity = function(requiredQuantity, options = {}) {
+    const { includeOnlyLotNumbers, excludeLotNumbers } = options;
+    const includeSet = Array.isArray(includeOnlyLotNumbers) ? new Set(includeOnlyLotNumbers) : null;
+    const excludeSet = Array.isArray(excludeLotNumbers) ? new Set(excludeLotNumbers) : null;
+
+    // FIFO - ตัดจากล็อตที่หมดอายุเร็วสุดก่อน (ตามเงื่อนไขกรอง)
+    const lotsArray = Array.isArray(this.lots) ? this.lots : [];
+    const activeLots = lotsArray
         .filter(lot => lot.status === 'active' && lot.quantity > 0)
+        .filter(lot => (includeSet ? includeSet.has(lot.lotNumber) : true))
+        .filter(lot => (excludeSet ? !excludeSet.has(lot.lotNumber) : true))
         .sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
-    
+
     let remainingToReduce = requiredQuantity;
     const reductions = [];
-    
+
     for (let lot of activeLots) {
         if (remainingToReduce <= 0) break;
-        
+
         const quantityToTake = Math.min(lot.quantity, remainingToReduce);
         lot.quantity -= quantityToTake;
         remainingToReduce -= quantityToTake;
-        
+
         reductions.push({
             lotNumber: lot.lotNumber,
             quantityTaken: quantityToTake,
             remainingInLot: lot.quantity
         });
-        
-        // ถ้าล็อตหมดแล้ว ไม่ต้องลบ เก็บไว้เป็น history
+
         if (lot.quantity === 0) {
             lot.status = 'depleted';
         }
     }
-    
+
     return {
         success: remainingToReduce === 0,
         reductions,
