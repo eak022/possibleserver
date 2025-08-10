@@ -310,9 +310,10 @@ exports.updateOrderDetail = async (req, res) => {
 
 exports.updateOrderStatus = async (req, res) => {
   try {
+    const { id } = req.params;
     const { orderStatus } = req.body;
-    const order = await OrderModel.findById(req.params.id);
-    
+
+    const order = await OrderModel.findById(id);
     if (!order) {
       return res.status(404).json({ message: "ไม่พบคำสั่งซื้อ" });
     }
@@ -326,18 +327,20 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // ถ้าสถานะเดิมเป็น "ขายสำเร็จ" และจะเปลี่ยนเป็น "ยกเลิก" หรือ "คืนสินค้า"
+    //ถ้าสถานะเดิมเป็น "ขายสำเร็จ" และจะเปลี่ยนเป็น "ยกเลิก" หรือ "คืนสินค้า"
     if (order.orderStatus === "ขายสำเร็จ" && (orderStatus === "ยกเลิก" || orderStatus === "คืนสินค้า")) {
       // คืนสต็อกสินค้าตามล็อตที่ใช้
       for (const item of order.products) {
         if (item.lotsUsed && item.lotsUsed.length > 0) {
-          // คืนสต็อกตามล็อตที่ใช้ในการขาย
+          //คืนสต็อกตามล็อตที่ใช้ในการขาย
           for (const lotUsed of item.lotsUsed) {
             const product = await ProductModel.findById(item.productId);
             if (product) {
               const lot = product.lots.find(l => l.lotNumber === lotUsed.lotNumber);
               if (lot) {
-                lot.quantity += lotUsed.quantityTaken;
+                // คืนสต็อก
+                lot.quantity += lotUsed.quantityTaken;  
+                //อัปเดตสถานะล็อต
                 if (lot.status === 'depleted' && lot.quantity > 0) {
                   lot.status = 'active';
                 }
@@ -345,15 +348,20 @@ exports.updateOrderStatus = async (req, res) => {
               }
             }
           }
+          
+          //ตรวจสอบและเติมสต็อกอัตโนมัติหลังจากคืนสต็อก
+          await checkAndAddStock(item.productId);
+  
         } else {
-          // Fallback สำหรับ order เก่าที่ไม่มีข้อมูลล็อต
+          //Fallback สำหรับ order เก่าที่ไม่มีข้อมูลล็อต
           let quantityToReturn = item.quantity;
           if (item.pack) {
             const product = await ProductModel.findById(item.productId);
-            if (product) {
+            if (product && product.packSize) {
               quantityToReturn *= product.packSize;
             }
           }
+          
           await ProductModel.findByIdAndUpdate(item.productId, {
             $inc: { quantity: quantityToReturn }
           });
@@ -361,10 +369,58 @@ exports.updateOrderStatus = async (req, res) => {
       }
     }
 
+    //ถ้าสถานะเดิมเป็น "ยกเลิก" หรือ "คืนสินค้า" และจะเปลี่ยนเป็น "ขายสำเร็จ"
+    if ((order.orderStatus === "ยกเลิก" || order.orderStatus === "คืนสินค้า") && orderStatus === "ขายสำเร็จ") {
+      // ตัดสต็อกสินค้าใหม่
+      for (const item of order.products) {
+        const product = await ProductModel.findById(item.productId);
+        if (!product) {
+          continue;
+        }
+        let requiredQuantity = item.quantity;
+        if (item.pack && product.packSize) {
+          requiredQuantity *= product.packSize;
+        }
+      
+        //ตรวจสอบสต็อก
+        if (product.totalQuantity < requiredQuantity) {
+          return res.status(400).json({ 
+            message: `สต็อกไม่พอสำหรับ ${item.productName}. มี: ${product.totalQuantity}, ต้องการ: ${requiredQuantity}` 
+          });
+        }
+        
+        //ตัดสต็อกแบบ FIFO
+        const reductionResult = product.reduceLotQuantity(requiredQuantity);
+        if (!reductionResult.success) {
+          return res.status(400).json({ 
+            message: `ไม่สามารถตัดสต็อก ${item.productName} ได้. ขาด: ${reductionResult.remainingShortage}` 
+          });
+        }
+        
+        //อัปเดตข้อมูลล็อตที่ใช้
+        const lotsUsed = reductionResult.reductions.map(reduction => {
+          const lot = product.lots.find(l => l.lotNumber === reduction.lotNumber);
+          return {
+            lotNumber: reduction.lotNumber,
+            quantityTaken: reduction.quantityTaken,
+            purchasePrice: lot.purchasePrice,
+            expirationDate: lot.expirationDate
+          };
+        });
+        
+        // อัปเดตข้อมูลสินค้าใน order
+        const productIndex = order.products.findIndex(p => p.productId.toString() === item.productId.toString());
+        if (productIndex !== -1) {
+          order.products[productIndex].lotsUsed = lotsUsed;
+        }
+        
+        await product.save();
+      }
+    }
+
     // อัพเดทสถานะ
     order.orderStatus = orderStatus;
     await order.save();
-
     res.status(200).json({ 
       message: "อัพเดทสถานะสำเร็จ", 
       order 
