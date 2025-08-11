@@ -40,7 +40,11 @@ exports.createCart = async (req, res) => {
 
     // ตรวจสอบล็อตที่ใช้งานได้จริง (active + ไม่หมดอายุ + มีสต็อก)
     const now = new Date();
-    const allActiveLots = (product.lots || []).filter(lot => lot.status === 'active' && lot.quantity > 0 && new Date(lot.expirationDate) > now);
+    const allActiveLots = (product.lots || []).filter(lot => 
+      lot.status === 'active' && 
+      lot.quantity > 0 && 
+      (lot.expirationDate ? new Date(lot.expirationDate) > now : true)
+    );
     
     // หาล็อตที่ใช้โปรโมชัน โดยค้นหาจาก Promotion model
     const promoUsedLots = new Set();
@@ -229,7 +233,11 @@ exports.deleteAllCarts = async (req, res) => {
 
       // ตรวจสอบล็อตที่พร้อมขาย
       const now = new Date();
-      const allActiveLots = (product.lots || []).filter(lot => lot.status === 'active' && lot.quantity > 0 && new Date(lot.expirationDate) > now);
+      const allActiveLots = (product.lots || []).filter(lot => 
+        lot.status === 'active' && 
+        lot.quantity > 0 && 
+        (lot.expirationDate ? new Date(lot.expirationDate) > now : true)
+      );
       
       // หาล็อตที่ใช้โปรโมชัน และคำนวณจำนวนที่ใช้ได้
       const promoUsedLots = new Set();
@@ -390,7 +398,12 @@ exports.deleteCartById = async (req, res) => {
 
         let promoAvailableQty = product.totalQuantity; // fallback ทั้งหมด
         if (Array.isArray(promotion.appliedLots) && promotion.appliedLots.length > 0) {
-          const eligibleLots = (product.lots || []).filter(l => l.status === 'active' && l.quantity > 0 && new Date(l.expirationDate) > now && promotion.appliedLots.includes(l.lotNumber));
+          const eligibleLots = (product.lots || []).filter(l => 
+            l.status === 'active' && 
+            l.quantity > 0 && 
+            (l.expirationDate ? new Date(l.expirationDate) > now : true) && 
+            promotion.appliedLots.includes(l.lotNumber)
+          );
           if (eligibleLots.length === 0) return res.status(400).json({ message: "ไม่มีล็อตที่ใช้โปรโมชันนี้ได้ในขณะนี้" });
           promoAvailableQty = eligibleLots.reduce((sum, l) => sum + l.quantity, 0);
         }
@@ -437,7 +450,11 @@ exports.deleteCartById = async (req, res) => {
       const pack = isPack;
       
       // ตรวจสอบล็อตที่พร้อมขายแบบปกติ (ไม่ใช่ล็อตที่ใช้โปรโมชัน)
-      const allActiveLots = (product.lots || []).filter(l => l.status === 'active' && l.quantity > 0 && new Date(l.expirationDate) > now);
+      const allActiveLots = (product.lots || []).filter(l => 
+        l.status === 'active' && 
+        l.quantity > 0 && 
+        (l.expirationDate ? new Date(l.expirationDate) > now : true)
+      );
       
       // หาล็อตที่ใช้โปรโมชัน โดยค้นหาจาก Promotion model
       const promoUsedLots = new Set();

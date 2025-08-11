@@ -89,10 +89,10 @@ exports.receiveStockFromDelivery = async (req, res) => {
         continue; // ข้ามสินค้าที่ยังไม่ส่งมอบ
       }
 
-      // ตรวจสอบว่ามีวันหมดอายุหรือไม่
-      if (!item.expirationDate) {
-        return res.status(400).json({ message: `Expiration date is required for product ${item.productId}` });
-      }
+      // ✅ ตรวจสอบว่ามีวันหมดอายุหรือไม่ (ไม่บังคับ)
+      // if (!item.expirationDate) {
+      //   return res.status(400).json({ message: `Expiration date is required for product ${item.productId}` });
+      // }
 
       // คำนวณจำนวนสินค้าที่จะเพิ่มเป็นล็อต
       let quantityToAdd;
@@ -116,7 +116,7 @@ exports.receiveStockFromDelivery = async (req, res) => {
       await product.addLot({
         quantity: quantityToAdd,
         purchasePrice: actualPurchasePrice, // ราคาต่อชิ้น
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         purchaseOrderId: purchaseOrderId
       });
 
@@ -169,10 +169,10 @@ exports.receiveStock = async (req, res) => {
         return res.status(404).json({ message: `Product with ID ${item.productId} not found` });
       }
 
-      // ตรวจสอบว่ามีวันหมดอายุหรือไม่
-      if (!item.expirationDate) {
-        return res.status(400).json({ message: `Expiration date is required for product ${item.productId}` });
-      }
+      // ✅ ตรวจสอบว่ามีวันหมดอายุหรือไม่ (ไม่บังคับ)
+      // if (!item.expirationDate) {
+      //   return res.status(400).json({ message: `Expiration date is required for product ${item.productId}` });
+      // }
 
       // ✅ ระบบล็อตใหม่ - เพิ่มสต็อกใหม่ได้เสมอ ไม่ว่าสต็อกเก่าจะเหลือหรือไม่
 
@@ -199,7 +199,7 @@ exports.receiveStock = async (req, res) => {
       await product.addLot({
         quantity: quantityToAdd,
         purchasePrice: actualPurchasePrice, // ราคาต่อชิ้น
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         purchaseOrderId: purchaseOrderId
       });
 
@@ -259,9 +259,9 @@ exports.createPurchaseOrder = async (req, res) => {
         return res.status(404).json({ message: `Product not found for ID: ${item.productId}` });
       }
 
-      // คำนวณราคาตามประเภทการขาย (แพ็คหรือชิ้น) - ใช้ averagePurchasePrice
-      const estimatedPrice = item.pack ? (product.averagePurchasePrice || 0) * product.packSize : (product.averagePurchasePrice || 0);
-      const sellingPricePerUnit = item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+      // ✅ ใช้ราคาซื้อที่ frontend ส่งมา (item.estimatedPrice) แทนที่จะใช้ averagePurchasePrice
+      const estimatedPrice = item.estimatedPrice || 0;
+      const sellingPricePerUnit = item.sellingPricePerUnit || (item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit);
 
       // คำนวณ subtotal ของแต่ละสินค้า
       const subtotal = item.orderedQuantity * estimatedPrice;
@@ -280,7 +280,7 @@ exports.createPurchaseOrder = async (req, res) => {
         deliveryDate: null, // ยังไม่มีวันที่ส่งมอบ
         deliveryNotes: "", // ยังไม่มีหมายเหตุ
         sellingPricePerUnit: sellingPricePerUnit,
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         subtotal: subtotal,
         pack: item.pack,
         packSize: item.packSize || product.packSize
@@ -392,7 +392,7 @@ exports.updatePurchaseOrder = async (req, res) => {
         deliveryDate: deliveryDate,
         deliveryNotes: deliveryNotes,
         sellingPricePerUnit: sellingPricePerUnit,
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         subtotal: subtotal,
         pack: item.pack,
         packSize: item.packSize || product.packSize
@@ -721,7 +721,7 @@ exports.addAllStockFromOrder = async (orderId) => {
       await product.addLot({
         quantity: quantityToAdd,
         purchasePrice: actualPurchasePrice, // ราคาต่อชิ้น
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         purchaseOrderId: order._id
       });
 
@@ -869,7 +869,7 @@ exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
         deliveryDate: deliveryDate,
         deliveryNotes: deliveryNotes,
         sellingPricePerUnit: sellingPricePerUnit,
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         subtotal: subtotal,
         pack: item.pack,
         packSize: item.packSize || product.packSize
@@ -900,10 +900,10 @@ exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
         continue;
       }
 
-      // ตรวจสอบว่ามีวันหมดอายุหรือไม่
-      if (!item.expirationDate) {
-        continue;
-      }
+      // ✅ ไม่ต้องตรวจสอบวันหมดอายุ - ให้สร้างล็อตได้เสมอ (รวมถึงล็อตที่ไม่มีวันหมดอายุ)
+      // if (!item.expirationDate) {
+      //   continue;
+      // }
 
       // คำนวณจำนวนสินค้าที่จะเพิ่มเป็นล็อต
       let quantityToAdd;
@@ -925,7 +925,7 @@ exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
       await product.addLot({
         quantity: quantityToAdd,
         purchasePrice: actualPurchasePrice,
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         purchaseOrderId: purchaseOrderId
       });
 

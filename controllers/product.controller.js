@@ -387,9 +387,9 @@ exports.addLotToProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // ตรวจสอบ lotNumber ซ้ำในสินค้าเดียวกัน
+    // ตรวจสอบ lotNumber ซ้ำในสินค้าเดียวกัน (ใช้ validation จาก Product Model)
     if (lotNumber && product.lots.some(lot => lot.lotNumber === lotNumber)) {
-      return res.status(400).json({ message: "Lot number already exists for this product" });
+      return res.status(400).json({ message: "เลขล็อตนี้มีอยู่แล้วในสินค้านี้ กรุณาใช้เลขล็อตอื่น" });
     }
 
     await product.addLot({
@@ -548,11 +548,16 @@ exports.updateLotDetails = async (req, res) => {
     }
 
     if (expirationDate !== undefined) {
-      const newExpirationDate = new Date(expirationDate);
-      if (isNaN(newExpirationDate.getTime())) {
-        return res.status(400).json({ message: "Invalid expiration date format" });
+      // ✅ รองรับการตั้งค่าวันหมดอายุเป็น null (ไม่มีวันหมดอายุ)
+      if (expirationDate === null || expirationDate === '') {
+        lot.expirationDate = null;
+      } else {
+        const newExpirationDate = new Date(expirationDate);
+        if (isNaN(newExpirationDate.getTime())) {
+          return res.status(400).json({ message: "รูปแบบวันที่ไม่ถูกต้อง กรุณาใช้รูปแบบ YYYY-MM-DD หรือส่งค่า null เพื่อลบวันหมดอายุ" });
+        }
+        lot.expirationDate = newExpirationDate;
       }
-      lot.expirationDate = newExpirationDate;
     }
 
     // บันทึกข้อมูลการแก้ไข
@@ -603,11 +608,16 @@ exports.updateLotComplete = async (req, res) => {
     }
 
     if (expirationDate !== undefined) {
-      const newExpirationDate = new Date(expirationDate);
-      if (isNaN(newExpirationDate.getTime())) {
-        return res.status(400).json({ message: "Invalid expiration date format" });
+      // ✅ รองรับการตั้งค่าวันหมดอายุเป็น null (ไม่มีวันหมดอายุ)
+      if (expirationDate === null || expirationDate === '') {
+        lot.expirationDate = null;
+      } else {
+        const newExpirationDate = new Date(expirationDate);
+        if (isNaN(newExpirationDate.getTime())) {
+          return res.status(400).json({ message: "รูปแบบวันที่ไม่ถูกต้อง กรุณาใช้รูปแบบ YYYY-MM-DD หรือส่งค่า null เพื่อลบวันหมดอายุ" });
+        }
+        lot.expirationDate = newExpirationDate;
       }
-      lot.expirationDate = newExpirationDate;
     }
 
     // บันทึกข้อมูลการแก้ไข
@@ -623,5 +633,35 @@ exports.updateLotComplete = async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
+  }
+};
+
+// ✅ ฟังก์ชันใหม่: เปลี่ยนเลขล็อตพร้อมตรวจสอบความซ้ำซ้อน
+exports.changeLotNumber = async (req, res) => {
+  try {
+    const { productId, lotNumber } = req.params;
+    const { newLotNumber, reason } = req.body;
+
+    if (!newLotNumber) {
+      return res.status(400).json({ message: "กรุณาระบุเลขล็อตใหม่" });
+    }
+
+    const product = await ProductModel.findById(productId);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    // ใช้ฟังก์ชัน changeLotNumber ที่มี validation ในตัว
+    await product.changeLotNumber(lotNumber, newLotNumber);
+
+    return res.status(200).json({ 
+      message: `เปลี่ยนเลขล็อตจาก ${lotNumber} เป็น ${newLotNumber} สำเร็จ`, 
+      updatedProduct: product
+    });
+  } catch (error) {
+    if (error.message.includes('มีอยู่แล้ว')) {
+      return res.status(400).json({ message: error.message });
+    }
+    return res.status(500).json({ message: error.message || "เกิดข้อผิดพลาดในการเปลี่ยนเลขล็อต" });
   }
 };
