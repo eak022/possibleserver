@@ -104,8 +104,26 @@ exports.createCart = async (req, res) => {
       });
     }
 
-    // กำหนดราคาตามว่า pack เป็น true หรือไม่
-    const price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+    // กำหนดราคาตามว่าเป็นสินค้าโปรโมชันหรือไม่
+    let price;
+    if (promotionId) {
+      // ถ้ามี promotionId ให้ใช้ราคาโปรโมชัน
+      try {
+        const promotion = await PromotionModel.findById(promotionId);
+        if (promotion) {
+          price = promotion.discountedPrice;
+        } else {
+          // ถ้าไม่พบโปรโมชัน ให้ใช้ราคาปกติ
+          price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+        }
+      } catch (error) {
+        // ถ้าเกิดข้อผิดพลาด ให้ใช้ราคาปกติ
+        price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+      }
+    } else {
+      // ถ้าไม่มี promotionId ให้ใช้ราคาปกติ
+      price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+    }
 
     // ตรวจสอบจำนวนรวมของสินค้าชิ้นเดียวกันในตะกร้า (รวมทั้งแพ็คและชิ้น)
     const allCartItemsForProduct = await CartModel.find({ 
@@ -415,13 +433,21 @@ exports.deleteCartById = async (req, res) => {
         }
         const price = promotion.discountedPrice;
 
-        const existingItem = await CartModel.findOne({ productId: product._id, userName: currentUsername, barcode, promotionId: promotion._id });
+        // ตรวจสอบสินค้าโปรโมชันในตะกร้า โดยใช้บาร์โค้ดสินค้าจริง (ไม่ใช่บาร์โค้ดโปรโมชัน)
+        const existingItem = await CartModel.findOne({ 
+          productId: product._id, 
+          userName: currentUsername, 
+          barcode: product.barcodeUnit, // ใช้บาร์โค้ดสินค้าจริง
+          promotionId: promotion._id 
+        });
         if (existingItem) {
           const newTotalQuantity = existingItem.quantity + quantity;
           if (newTotalQuantity > promoAvailableQty) {
             return res.status(400).json({ message: `ไม่สามารถเพิ่มสินค้าโปรโมชันได้ จำนวนที่พร้อมขายสำหรับโปรฯ มีเพียง ${promoAvailableQty} หน่วย` });
           }
+          // อัปเดตจำนวนและราคาโปรโมชันปัจจุบัน
           existingItem.quantity += quantity;
+          existingItem.price = promotion.discountedPrice; // อัปเดตราคาโปรโมชันปัจจุบัน
           const updatedItem = await existingItem.save();
           return res.json(updatedItem);
         }
@@ -434,7 +460,7 @@ exports.deleteCartById = async (req, res) => {
           quantity,
           userName: currentUsername,
           pack,
-          barcode,
+          barcode: product.barcodeUnit, // ใช้บาร์โค้ดสินค้าจริง แทนบาร์โค้ดโปรโมชัน
           promotionId: promotion._id,
           packSize: product.packSize || 1
         });
