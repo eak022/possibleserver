@@ -21,9 +21,8 @@ const updateProductStatus = async (req, res, next) => {
         for (const product of products) {
             let newStatuses = [];
 
-            // Debug: แสดงข้อมูลล็อตของสินค้า
+            // ตรวจสอบล็อตที่ใช้งานได้
             const activeLots = product.lots.filter(lot => lot.status === 'active' && lot.quantity > 0);
-            console.log(`Product ${product.productName}: Active lots: ${activeLots.length}, Total quantity: ${product.totalQuantity}`);
 
             // ตรวจสอบว่าสินค้าเป็นเลิกขายหรือไม่
             const isDiscontinued = product.productStatuses.some(status => 
@@ -46,7 +45,6 @@ const updateProductStatus = async (req, res, next) => {
                                     // ตรวจสอบสินค้าใกล้หมด
                 if (product.totalQuantity < 5) {
                     newStatuses.push(lowStockStatus);
-                    console.log(`Product ${product.productName}: Low stock detected - Total quantity: ${product.totalQuantity}`);
                 }
 
                     // ตรวจสอบสินค้าใกล้หมดอายุ (เฉพาะสินค้าที่ยังไม่หมดอายุ)
@@ -61,7 +59,6 @@ const updateProductStatus = async (req, res, next) => {
             const newStatusIds = newStatuses.map(status => status._id.toString());
             
             if (JSON.stringify(currentStatusIds.sort()) !== JSON.stringify(newStatusIds.sort())) {
-                console.log(`Product ${product.productName}: Status updated from [${product.productStatuses.map(s => s.statusName).join(', ')}] to [${newStatuses.map(s => s.statusName).join(', ')}]`);
                 await ProductModel.findByIdAndUpdate(product._id, { 
                     productStatuses: newStatuses.map(status => status._id)
                 });

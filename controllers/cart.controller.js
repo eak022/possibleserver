@@ -40,37 +40,93 @@ exports.createCart = async (req, res) => {
 
     // ตรวจสอบล็อตที่ใช้งานได้จริง (active + ไม่หมดอายุ + มีสต็อก)
     const now = new Date();
-    const eligibleLots = (product.lots || []).filter(lot => lot.status === 'active' && lot.quantity > 0 && new Date(lot.expirationDate) > now);
-    if (eligibleLots.length === 0) {
-      return res.status(400).json({ message: 'ไม่มีล็อตสินค้าที่พร้อมขาย (อาจหมดอายุหรือหมดสต็อก)' });
+    const allActiveLots = (product.lots || []).filter(lot => lot.status === 'active' && lot.quantity > 0 && new Date(lot.expirationDate) > now);
+    
+    // หาล็อตที่ใช้โปรโมชัน โดยค้นหาจาก Promotion model
+    const promoUsedLots = new Set();
+    let promoAvailableQty = 0;
+    let isPromotionProduct = false;
+    
+    try {
+      const activePromotions = await PromotionModel.find({
+        productId: product._id,
+        validityStart: { $lte: now },
+        validityEnd: { $gte: now }
+      });
+      
+      for (const promo of activePromotions) {
+        if (promo.appliedLots && Array.isArray(promo.appliedLots)) {
+          promo.appliedLots.forEach(lotNumber => promoUsedLots.add(lotNumber));
+        }
+      }
+      
+      // ถ้ามี promotionId แสดงว่าเป็นสินค้าโปรโมชัน
+      if (promotionId) {
+        const currentPromo = activePromotions.find(p => p._id.toString() === promotionId);
+        if (currentPromo && currentPromo.appliedLots && Array.isArray(currentPromo.appliedLots)) {
+          isPromotionProduct = true;
+          const eligibleLots = allActiveLots.filter(lot => currentPromo.appliedLots.includes(lot.lotNumber));
+          promoAvailableQty = eligibleLots.reduce((sum, lot) => sum + lot.quantity, 0);
+        }
+      }
+    } catch (error) {
+      // Error fetching promotions - handled silently
     }
-
-    // ตรวจสอบจำนวนสินค้าในสต็อก (ใช้ totalQuantity)
+    
+    // ล็อตที่ขายได้แบบปกติ (ไม่ใช่ล็อตที่ใช้โปรโมชัน)
+    const normalSaleLots = allActiveLots.filter(lot => !promoUsedLots.has(lot.lotNumber));
+    
+    // ตรวจสอบจำนวนสินค้าในสต็อก
+    let availableQuantity;
+    let stockMessage;
+    
+    if (isPromotionProduct) {
+      // สำหรับสินค้าโปรโมชัน ใช้จำนวนจากล็อตที่กำหนด
+      availableQuantity = promoAvailableQty;
+      stockMessage = `จำนวนสินค้าโปรโมชันที่พร้อมขายมีเพียง ${availableQuantity} ชิ้น`;
+    } else {
+      // สำหรับสินค้าปกติ ใช้จำนวนจากล็อตที่ไม่ได้ใช้โปรโมชัน
+      if (normalSaleLots.length === 0) {
+        return res.status(400).json({ message: 'ไม่มีล็อตสินค้าที่พร้อมขายแบบปกติ (ล็อตทั้งหมดถูกใช้ในโปรโมชัน)' });
+      }
+      availableQuantity = normalSaleLots.reduce((sum, lot) => sum + lot.quantity, 0);
+      stockMessage = `จำนวนสินค้าที่ขายได้แบบปกติมีเพียง ${availableQuantity} ชิ้น`;
+    }
+    
     const requestedQuantity = pack ? quantity * product.packSize : quantity;
-    if (requestedQuantity > product.totalQuantity) {
+    if (requestedQuantity > availableQuantity) {
       return res.status(400).json({ 
-        message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าคงเหลือ ${product.totalQuantity} ${pack ? 'แพ็ค' : 'ชิ้น'}`
+        message: `ไม่สามารถเพิ่มสินค้าได้ ${stockMessage}` 
       });
     }
 
     // กำหนดราคาตามว่า pack เป็น true หรือไม่
     const price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
 
+    // ตรวจสอบจำนวนรวมของสินค้าชิ้นเดียวกันในตะกร้า (รวมทั้งแพ็คและชิ้น)
+    const allCartItemsForProduct = await CartModel.find({ 
+      productId, 
+      userName: currentUsername, 
+      promotionId: promotionId || null 
+    });
+    
+    // คำนวณจำนวนชิ้นรวมที่อยู่ในตะกร้าแล้ว
+    const totalCartQuantity = allCartItemsForProduct.reduce((sum, cartItem) => {
+      return sum + (cartItem.pack ? cartItem.quantity * cartItem.packSize : cartItem.quantity);
+    }, 0);
+    
+    // ตรวจสอบว่าจำนวนใหม่จะเกินสต็อกหรือไม่
+    const newTotalQuantity = totalCartQuantity + (pack ? quantity * product.packSize : quantity);
+    if (newTotalQuantity > availableQuantity) {
+      return res.status(400).json({ 
+        message: `ไม่สามารถเพิ่มสินค้าได้ ${stockMessage} (ในตะกร้ามี ${totalCartQuantity} ชิ้นแล้ว) - จำนวนที่ขอ: ${pack ? quantity + ' แพ็ค (' + (quantity * product.packSize) + ' ชิ้น)' : quantity + ' ชิ้น'}` 
+      });
+    }
+
     // ค้นหาสินค้าในตะกร้าของผู้ใช้ โดยแยกตาม barcode และ promotionId
     const existingItem = await CartModel.findOne({ productId, userName: currentUsername, barcode: barcode || (pack ? product.barcodePack : product.barcodeUnit), promotionId: promotionId || null });
 
     if (existingItem) {
-      // ตรวจสอบจำนวนรวมที่จะมีในตะกร้า
-      const newTotalQuantity = pack ? 
-        (existingItem.quantity + quantity) * product.packSize : 
-        existingItem.quantity + quantity;
-
-      if (newTotalQuantity > product.totalQuantity) {
-        return res.status(400).json({ 
-          message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าคงเหลือ ${product.totalQuantity} ${pack ? 'แพ็ค' : 'ชิ้น'}`
-        });
-      }
-
       // ถ้าพบสินค้าในตะกร้าแล้ว ให้เพิ่มจำนวนสินค้า
       existingItem.quantity += quantity;
       const updatedItem = await existingItem.save();
@@ -87,13 +143,13 @@ exports.createCart = async (req, res) => {
       userName: currentUsername,
         pack,
         barcode: barcode || (pack ? product.barcodePack : product.barcodeUnit),
-        promotionId: promotionId || null
+        promotionId: promotionId || null,
+        packSize: product.packSize || 1
     });
 
     const newItem = await cart.save();
     res.status(201).json(newItem);
   } catch (error) {
-    console.error("Error during cart creation:", error);
     res.status(500).json({ message: error.message || "Something went wrong!" });
   }
 };
@@ -173,18 +229,73 @@ exports.deleteAllCarts = async (req, res) => {
 
       // ตรวจสอบล็อตที่พร้อมขาย
       const now = new Date();
-      const eligibleLots = (product.lots || []).filter(lot => lot.status === 'active' && lot.quantity > 0 && new Date(lot.expirationDate) > now);
-      if (eligibleLots.length === 0) {
-        return res.status(400).json({ message: 'ไม่มีล็อตสินค้าที่พร้อมขาย (อาจหมดอายุหรือหมดสต็อก)' });
+      const allActiveLots = (product.lots || []).filter(lot => lot.status === 'active' && lot.quantity > 0 && new Date(lot.expirationDate) > now);
+      
+      // หาล็อตที่ใช้โปรโมชัน และคำนวณจำนวนที่ใช้ได้
+      const promoUsedLots = new Set();
+      let availableQuantity = 0;
+      
+      try {
+        const activePromotions = await PromotionModel.find({
+          productId: product._id,
+          validityStart: { $lte: now },
+          validityEnd: { $gte: now }
+        });
+        
+        for (const promo of activePromotions) {
+          if (promo.appliedLots && Array.isArray(promo.appliedLots)) {
+            promo.appliedLots.forEach(lotNumber => promoUsedLots.add(lotNumber));
+          }
+        }
+        
+        // ถ้ารายการในตะกร้ามีโปรโมชัน ให้ใช้จำนวนจากล็อตที่กำหนด
+        if (cart.promotionId) {
+          const currentPromo = activePromotions.find(p => p._id.toString() === cart.promotionId.toString());
+          if (currentPromo && currentPromo.appliedLots && Array.isArray(currentPromo.appliedLots)) {
+            const eligibleLots = allActiveLots.filter(lot => currentPromo.appliedLots.includes(lot.lotNumber));
+            availableQuantity = eligibleLots.reduce((sum, lot) => sum + lot.quantity, 0);
+          }
+        } else {
+          // สำหรับสินค้าปกติ ใช้จำนวนจากล็อตที่ไม่ได้ใช้โปรโมชัน
+          const normalSaleLots = allActiveLots.filter(lot => !promoUsedLots.has(lot.lotNumber));
+          if (normalSaleLots.length === 0) {
+            return res.status(400).json({ message: 'ไม่มีล็อตสินค้าที่พร้อมขายแบบปกติ (ล็อตทั้งหมดถูกใช้ในโปรโมชัน)' });
+          }
+          availableQuantity = normalSaleLots.reduce((sum, lot) => sum + lot.quantity, 0);
+        }
+      } catch (error) {
+        // Error fetching promotions - handled silently
       }
 
-      // ตรวจสอบจำนวนสินค้าในสต็อก (ใช้ totalQuantity) โดยคำนวณตาม pack ที่มีผลจริง
+      // ตรวจสอบจำนวนรวมของสินค้าชิ้นเดียวกันในตะกร้า (รวมทั้งแพ็คและชิ้น)
       const effectivePack = (pack !== undefined) ? pack : cart.pack;
       const effectiveQuantity = (quantity !== undefined) ? quantity : cart.quantity;
+      
+      // คำนวณจำนวนชิ้นรวมที่จะมีในตะกร้าหลังอัปเดต
       const requestedQuantity = effectivePack ? effectiveQuantity * product.packSize : effectiveQuantity;
-      if (requestedQuantity > product.totalQuantity) {
+      
+      // ตรวจสอบจำนวนรวมของสินค้าชิ้นเดียวกันในตะกร้าอื่นๆ (ไม่รวมรายการปัจจุบัน)
+      const otherCartItemsForProduct = await CartModel.find({ 
+        productId: cart.productId, 
+        userName: currentUsername, 
+        promotionId: cart.promotionId || null,
+        _id: { $ne: cart._id } // ไม่รวมรายการปัจจุบัน
+      });
+      
+      // คำนวณจำนวนชิ้นรวมที่อยู่ในตะกร้าอื่นๆ แล้ว
+      const otherCartQuantity = otherCartItemsForProduct.reduce((sum, cartItem) => {
+        return sum + (cartItem.pack ? cartItem.quantity * cartItem.packSize : cartItem.quantity);
+      }, 0);
+      
+      // ตรวจสอบว่าจำนวนรวมจะเกินสต็อกหรือไม่
+      const totalRequestedQuantity = otherCartQuantity + requestedQuantity;
+      if (totalRequestedQuantity > availableQuantity) {
+        const stockMessage = cart.promotionId ? 
+          `จำนวนสินค้าโปรโมชันที่พร้อมขายมีเพียง ${availableQuantity} ชิ้น` :
+          `จำนวนสินค้าที่ขายได้แบบปกติมีเพียง ${availableQuantity} ชิ้น`;
+        
         return res.status(400).json({ 
-          message: `ไม่สามารถอัพเดทสินค้าได้ จำนวนสินค้าคงเหลือ ${product.totalQuantity} หน่วย`
+          message: `ไม่สามารถอัพเดทสินค้าได้ ${stockMessage} (ในตะกร้ามี ${otherCartQuantity} ชิ้นแล้ว) - จำนวนที่ขอ: ${effectivePack ? effectiveQuantity + ' แพ็ค (' + (effectiveQuantity * product.packSize) + ' ชิ้น)' : effectiveQuantity + ' ชิ้น'}` 
         });
       }
 
@@ -213,9 +324,14 @@ exports.deleteAllCarts = async (req, res) => {
           const mergedQuantityUnits = cart.pack
             ? (cart.quantity + duplicate.quantity) * product.packSize
             : (cart.quantity + duplicate.quantity);
-          if (mergedQuantityUnits > product.totalQuantity) {
+          
+          if (mergedQuantityUnits > availableQuantity) {
+            const stockMessage = cart.promotionId ? 
+              `จำนวนสินค้าโปรโมชันที่พร้อมขาย (${availableQuantity} ชิ้น)` :
+              `จำนวนสินค้าที่ขายได้แบบปกติ (${availableQuantity} ชิ้น)`;
+            
             return res.status(400).json({
-              message: `ไม่สามารถรวมรายการได้ เนื่องจากจำนวนรวมเกินสต็อก (${product.totalQuantity} หน่วย)`
+              message: `ไม่สามารถรวมรายการได้ เนื่องจากจำนวนรวมเกินสต็อก - ${stockMessage}`
             });
           }
           cart.quantity = cart.quantity + duplicate.quantity;
@@ -226,7 +342,6 @@ exports.deleteAllCarts = async (req, res) => {
       const updatedCart = await cart.save();
       res.json(updatedCart);
     } catch (error) {
-      console.error("Error updating cart:", error);
       res.status(500).json({ message: error.message || "Something went wrong!" });
     }
   };
@@ -254,7 +369,6 @@ exports.deleteCartById = async (req, res) => {
   exports.createCartWithBarcode = async (req, res) => {
     const { barcode, quantity, userName } = req.body;
     const currentUsername = req.user?.username;
-    console.log("Received data:", req.body);
 
     if (!barcode || !quantity) {
       return res.status(400).json({ message: "Product information is missing!" });
@@ -308,7 +422,8 @@ exports.deleteCartById = async (req, res) => {
           userName: currentUsername,
           pack,
           barcode,
-          promotionId: promotion._id
+          promotionId: promotion._id,
+          packSize: product.packSize || 1
         });
         const newItem = await cart.save();
         return res.status(201).json(newItem);
@@ -320,23 +435,69 @@ exports.deleteCartById = async (req, res) => {
 
       const isPack = barcode === product.barcodePack;
       const pack = isPack;
-      // ตรวจสอบล็อตที่พร้อมขาย
-      const eligibleLots = (product.lots || []).filter(l => l.status === 'active' && l.quantity > 0 && new Date(l.expirationDate) > now);
-      if (eligibleLots.length === 0) {
-        return res.status(400).json({ message: 'ไม่มีล็อตสินค้าที่พร้อมขาย (อาจหมดอายุหรือหมดสต็อก)' });
+      
+      // ตรวจสอบล็อตที่พร้อมขายแบบปกติ (ไม่ใช่ล็อตที่ใช้โปรโมชัน)
+      const allActiveLots = (product.lots || []).filter(l => l.status === 'active' && l.quantity > 0 && new Date(l.expirationDate) > now);
+      
+      // หาล็อตที่ใช้โปรโมชัน โดยค้นหาจาก Promotion model
+      const promoUsedLots = new Set();
+      try {
+        const activePromotions = await PromotionModel.find({
+          productId: product._id,
+          validityStart: { $lte: now },
+          validityEnd: { $gte: now }
+        });
+        
+        for (const promo of activePromotions) {
+          if (promo.appliedLots && Array.isArray(promo.appliedLots)) {
+            promo.appliedLots.forEach(lotNumber => promoUsedLots.add(lotNumber));
+          }
+        }
+      } catch (error) {
+        // Error fetching promotions - handled silently
       }
+      
+      // ล็อตที่ขายได้แบบปกติ (ไม่ใช่ล็อตที่ใช้โปรโมชัน)
+      const normalSaleLots = allActiveLots.filter(lot => !promoUsedLots.has(lot.lotNumber));
+      
+      if (normalSaleLots.length === 0) {
+        return res.status(400).json({ message: 'ไม่มีล็อตสินค้าที่พร้อมขายแบบปกติ (ล็อตทั้งหมดถูกใช้ในโปรโมชัน)' });
+      }
+      
+      // คำนวณจำนวนสินค้าที่ขายได้แบบปกติ
+      const normalSaleQuantity = normalSaleLots.reduce((sum, lot) => sum + lot.quantity, 0);
+      
       const requestedQuantity = pack ? quantity * product.packSize : quantity;
-      if (requestedQuantity > product.totalQuantity) {
-        return res.status(400).json({ message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าในสต็อกมีเพียง ${product.totalQuantity} ${pack ? 'ชิ้น' : 'หน่วย'}` });
+      if (requestedQuantity > normalSaleQuantity) {
+        return res.status(400).json({ 
+          message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าที่ขายได้แบบปกติมีเพียง ${normalSaleQuantity} ชิ้น (ล็อตที่ใช้โปรโมชันไม่สามารถขายได้แบบปกติ)` 
+        });
       }
+      
       const price = pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+
+      // ตรวจสอบจำนวนรวมของสินค้าชิ้นเดียวกันในตะกร้า (รวมทั้งแพ็คและชิ้น)
+      const allCartItemsForProduct = await CartModel.find({ 
+        productId: product._id, 
+        userName: currentUsername, 
+        promotionId: null 
+      });
+      
+      // คำนวณจำนวนชิ้นรวมที่อยู่ในตะกร้าแล้ว
+      const totalCartQuantity = allCartItemsForProduct.reduce((sum, cartItem) => {
+        return sum + (cartItem.pack ? cartItem.quantity * cartItem.packSize : cartItem.quantity);
+      }, 0);
+      
+      // ตรวจสอบว่าจำนวนใหม่จะเกินสต็อกที่ขายได้แบบปกติหรือไม่
+      const newTotalQuantity = totalCartQuantity + (pack ? quantity * product.packSize : quantity);
+      if (newTotalQuantity > normalSaleQuantity) {
+        return res.status(400).json({ 
+          message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าที่ขายได้แบบปกติมีเพียง ${normalSaleQuantity} ชิ้น (ในตะกร้ามี ${totalCartQuantity} ชิ้นแล้ว) - จำนวนที่ขอ: ${pack ? quantity + ' แพ็ค (' + (quantity * product.packSize) + ' ชิ้น)' : quantity + ' ชิ้น'}` 
+        });
+      }
 
       const existingItem = await CartModel.findOne({ productId: product._id, userName: currentUsername, barcode, promotionId: null });
       if (existingItem) {
-        const newTotalQuantity = pack ? (existingItem.quantity + quantity) * product.packSize : existingItem.quantity + quantity;
-        if (newTotalQuantity > product.totalQuantity) {
-          return res.status(400).json({ message: `ไม่สามารถเพิ่มสินค้าได้ จำนวนสินค้าในสต็อกมีเพียง ${product.totalQuantity} ${pack ? 'ชิ้น' : 'หน่วย'}` });
-        }
         existingItem.quantity += quantity;
         const updatedItem = await existingItem.save();
         return res.json(updatedItem);
@@ -351,12 +512,12 @@ exports.deleteCartById = async (req, res) => {
         userName: currentUsername,
         pack,
         barcode,
-        promotionId: null
+        promotionId: null,
+        packSize: product.packSize || 1
       });
       const newItem = await cart.save();
       return res.status(201).json(newItem);
     } catch (error) {
-      console.error("Error during cart creation:", error);
       res.status(500).json({ message: error.message || "Something went wrong!" });
     }
   };

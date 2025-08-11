@@ -8,8 +8,8 @@ const ProductSchema = new Schema({
     categoryId: { type: Schema.Types.ObjectId, ref: "Category", required: true },
     packSize: { type: Number, required: true },
     productStatuses: [{ type: Schema.Types.ObjectId, ref: "Status" }],
-    barcodePack: { type: String, unique: true },
-    barcodeUnit: { type: String, unique: true },
+    barcodePack: { type: String, unique: true, sparse: true },
+    barcodeUnit: { type: String, unique: true, sparse: true },
     
     // ✅ ระบบล็อตใหม่ - เก็บข้อมูลแยกตามล็อต
     lots: {
@@ -17,7 +17,7 @@ const ProductSchema = new Schema({
             lotNumber: { type: String, required: true }, // เลขล็อต (auto-generated)
             quantity: { type: Number, required: true },   // จำนวนในล็อตนี้
             purchasePrice: { type: Number, required: true }, // ราคาซื้อล็อตนี้
-            expirationDate: { type: Date, required: true },  // วันหมดอายุล็อตนี้
+            expirationDate: { type: Date, required: false },  // วันหมดอายุล็อตนี้ (ไม่บังคับ)
             receivedDate: { type: Date, default: Date.now },  // วันที่รับสินค้า
             purchaseOrderId: { type: Schema.Types.ObjectId, ref: "PurchaseOrder" }, // อ้างอิงใบสั่งซื้อ
             status: { type: String, enum: ["active", "expired", "disposed", "depleted"], default: "active" }

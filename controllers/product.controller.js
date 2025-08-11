@@ -26,12 +26,12 @@ exports.createProduct = async (req, res) => {
 
       // ✅ จัดการข้อมูลล็อตแรกจาก FormData
       let initialLot = null;
-      if (req.body['initialLot[quantity]'] && req.body['initialLot[quantity]'] > 0) {
+      if (req.body.initialLotQuantity && req.body.initialLotQuantity > 0) {
           initialLot = {
-              quantity: req.body['initialLot[quantity]'],
-              purchasePrice: req.body['initialLot[purchasePrice]'],
-              expirationDate: req.body['initialLot[expirationDate]'],
-              lotNumber: req.body['initialLot[lotNumber]'] || null
+              quantity: req.body.initialLotQuantity,
+              purchasePrice: req.body.initialLotPurchasePrice,
+              expirationDate: req.body.initialLotExpirationDate,
+              lotNumber: req.body.initialLotLotNumber || null
           };
       }
 
@@ -45,8 +45,8 @@ exports.createProduct = async (req, res) => {
         return res.status(400).json({ message: "มีสินค้าชื่อนี้อยู่ในระบบแล้ว" });
       }
       
-      // ตรวจสอบ barcodePack ซ้ำ
-      if (barcodePack) {
+      // ตรวจสอบ barcodePack ซ้ำ (เฉพาะเมื่อมีค่า)
+      if (barcodePack && barcodePack.trim() !== '') {
         const barcodePackExists = await ProductModel.findOne({
           $or: [{ barcodePack }, { barcodeUnit: barcodePack }]
         });
@@ -55,8 +55,8 @@ exports.createProduct = async (req, res) => {
         }
       }
       
-      // ตรวจสอบ barcodeUnit ซ้ำ
-      if (barcodeUnit) {
+      // ตรวจสอบ barcodeUnit ซ้ำ (เฉพาะเมื่อมีค่า)
+      if (barcodeUnit && barcodeUnit.trim() !== '') {
         const barcodeUnitExists = await ProductModel.findOne({
           $or: [{ barcodePack: barcodeUnit }, { barcodeUnit: barcodeUnit }]
         });
@@ -65,8 +65,8 @@ exports.createProduct = async (req, res) => {
         }
       }
 
-      // ✅ ไม่อนุญาตให้ barcodePack และ barcodeUnit ของสินค้าเดียวกันซ้ำกัน
-      if (barcodePack && barcodeUnit && barcodePack === barcodeUnit) {
+      // ✅ ไม่อนุญาตให้ barcodePack และ barcodeUnit ของสินค้าเดียวกันซ้ำกัน (เฉพาะเมื่อมีค่าทั้งคู่)
+      if (barcodePack && barcodeUnit && barcodePack.trim() !== '' && barcodeUnit.trim() !== '' && barcodePack === barcodeUnit) {
         return res.status(400).json({ message: "บาร์โค้ดแพ็คและบาร์โค้ดชิ้นต้องไม่ซ้ำกันในสินค้าเดียวกัน" });
       }
 
@@ -77,8 +77,8 @@ exports.createProduct = async (req, res) => {
           categoryId,
           packSize,
           productStatuses: productStatuses ? [productStatuses] : [], // แปลงเป็น array
-          barcodePack,
-          barcodeUnit,
+          barcodePack: barcodePack && barcodePack.trim() !== '' ? barcodePack : undefined,
+          barcodeUnit: barcodeUnit && barcodeUnit.trim() !== '' ? barcodeUnit : undefined,
           sellingPricePerUnit,
           sellingPricePerPack,
           lots: [] // เริ่มต้นเป็น array ว่าง
@@ -90,7 +90,7 @@ exports.createProduct = async (req, res) => {
           const lotData = {
               quantity: Number(initialLot.quantity),
               purchasePrice: Number(initialLot.purchasePrice),
-              expirationDate: new Date(initialLot.expirationDate),
+              expirationDate: initialLot.expirationDate ? new Date(initialLot.expirationDate) : undefined,
               lotNumber: initialLot.lotNumber || undefined
           };
           
@@ -164,7 +164,6 @@ exports.getAllProducts = async (req, res) => {
       .populate("productStatuses", "statusName statusColor");
     res.json(products);
   } catch (error) {
-    console.log(error.message);
     res.status(500).send({
       message: "Error occurred while fetching products.",
     });
@@ -187,7 +186,6 @@ exports.getProductById = async (req, res) => {
 
     res.json(product);
   } catch (error) {
-    console.log(error.message);
     res.status(500).send({
       message: "Error occurred while fetching product by ID.",
     });

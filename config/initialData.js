@@ -5,7 +5,6 @@ const initializeStatuses = async () => {
         // ตรวจสอบว่ามีข้อมูลอยู่แล้วหรือไม่
         const existingStatuses = await StatusModel.find();
         if (existingStatuses.length > 0) {
-            console.log('Statuses already exist, skipping initialization');
             return;
         }
 
@@ -40,8 +39,6 @@ const initializeStatuses = async () => {
         for (const status of initialStatuses) {
             await StatusModel.create(status);
         }
-        
-        console.log('Statuses initialized successfully');
     } catch (error) {
         console.error('Error initializing statuses:', error);
     }

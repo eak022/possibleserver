@@ -12,7 +12,9 @@ const CartSchema = new Schema({
   // ✅ แยกบรรทัดด้วย barcode (เช่น แพ็ค/ชิ้น หรือโปรโมชัน)
   barcode: { type: String, required: true },
   // ✅ โปรโมชันที่ผูกกับบรรทัดนี้ (ถ้ามี)
-  promotionId: { type: Schema.Types.ObjectId, ref: "Promotion" }
+  promotionId: { type: Schema.Types.ObjectId, ref: "Promotion" },
+  // ✅ เพิ่ม packSize เพื่อแสดงจำนวนชิ้นในแพ็ค
+  packSize: { type: Number, default: 1 }
 }, { timestamps: true });
 
 // ดัชนีเพื่อให้ค้นรวดเร็วและป้องกันการซ้ำซ้อนเชิงตรรกะต่อผู้ใช้

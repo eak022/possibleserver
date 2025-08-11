@@ -99,11 +99,9 @@ exports.receiveStockFromDelivery = async (req, res) => {
       if (item.pack && product.packSize) {
         // ถ้าเป็นแพ็ค ให้คูณด้วย packSize
         quantityToAdd = deliveredQuantity * product.packSize;
-        console.log(`Adding pack: ${deliveredQuantity} packs × ${product.packSize} units = ${quantityToAdd} units`);
       } else {
         // ถ้าเป็นชิ้น ใช้จำนวนปกติ
         quantityToAdd = deliveredQuantity;
-        console.log(`Adding units: ${quantityToAdd} units`);
       }
 
       // ใช้ราคาจริงที่ส่งมอบ
@@ -112,7 +110,6 @@ exports.receiveStockFromDelivery = async (req, res) => {
       // ถ้าเป็นแพ็ค ให้หารด้วย packSize เพื่อได้ราคาต่อชิ้น
       if (item.pack && product.packSize && product.packSize > 0) {
         actualPurchasePrice = actualPurchasePrice / product.packSize;
-        console.log(`Converting pack price to unit price: ${item.actualPrice || item.estimatedPrice} / ${product.packSize} = ${actualPurchasePrice}`);
       }
 
       // ✅ สร้างล็อตใหม่แทนการเพิ่ม quantity
@@ -123,8 +120,7 @@ exports.receiveStockFromDelivery = async (req, res) => {
         purchaseOrderId: purchaseOrderId
       });
 
-      // เก็บ log การเปลี่ยนแปลง
-      console.log(`Updated product ${product.productName}: Added ${quantityToAdd} units, New total: ${product.totalQuantity}`);
+
       
       addedProducts.push({
         productName: product.productName,
@@ -185,11 +181,9 @@ exports.receiveStock = async (req, res) => {
       if (item.pack && product.packSize) {
         // ถ้าเป็นแพ็ค ให้คูณด้วย packSize
         quantityToAdd = (item.deliveredQuantity || item.orderedQuantity) * product.packSize;
-        console.log(`Adding pack: ${item.deliveredQuantity || item.orderedQuantity} packs × ${product.packSize} units = ${quantityToAdd} units`);
       } else {
         // ถ้าเป็นชิ้น ใช้จำนวนปกติ
         quantityToAdd = item.deliveredQuantity || item.orderedQuantity;
-        console.log(`Adding units: ${quantityToAdd} units`);
       }
 
       // ใช้ราคาจริงที่ส่งมอบ

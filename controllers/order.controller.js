@@ -116,7 +116,6 @@ exports.createOrder = async (req, res) => {
       }
       
       await productToReduce.save();
-      console.log(`Stock reduced for ${item.productName}:`, reductionResult.reductions);
 
       // ✅ เก็บข้อมูลล็อตที่ใช้ในการขาย
       const lotsUsed = reductionResult.reductions.map(reduction => {
