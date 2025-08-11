@@ -19,29 +19,16 @@ exports.updateDeliveryInfo = async (req, res) => {
       );
 
       if (productIndex !== -1) {
-        purchaseOrder.products[productIndex].deliveredQuantity = delivery.deliveredQuantity || 0;
+        // ใช้ค่าที่ส่งมาจาก frontend โดยตรง (รวมถึง 0)
+        purchaseOrder.products[productIndex].deliveredQuantity = delivery.deliveredQuantity;
         purchaseOrder.products[productIndex].actualPrice = delivery.actualPrice;
         purchaseOrder.products[productIndex].deliveryDate = delivery.deliveryDate;
         purchaseOrder.products[productIndex].deliveryNotes = delivery.deliveryNotes;
       }
     }
 
-    // คำนวณสถานะการส่งมอบ
-    const totalOrdered = purchaseOrder.products.reduce((sum, p) => sum + p.orderedQuantity, 0);
-    const totalDelivered = purchaseOrder.products.reduce((sum, p) => sum + (p.deliveredQuantity || 0), 0);
-
-    if (totalDelivered === 0) {
-      purchaseOrder.deliveryStatus = "not_delivered";
-    } else if (totalDelivered < totalOrdered) {
-      purchaseOrder.deliveryStatus = "partially_delivered";
-    } else {
-      purchaseOrder.deliveryStatus = "fully_delivered";
-    }
-
-    // ถ้าส่งมอบครบแล้ว ให้เปลี่ยนสถานะเป็น delivered
-    if (purchaseOrder.deliveryStatus === "fully_delivered") {
-      purchaseOrder.status = "delivered";
-    }
+    // ไม่ต้องคำนวณสถานะการส่งมอบ - ให้คงสถานะเดิมไว้
+    // สถานะจะถูกอัปเดตเป็น "fully_delivered" เมื่อเติมสินค้าเท่านั้น
 
     await purchaseOrder.save();
 
@@ -86,6 +73,7 @@ exports.receiveStockFromDelivery = async (req, res) => {
       // ใช้ข้อมูลการส่งมอบจริง
       const deliveredQuantity = item.deliveredQuantity || 0;
       if (deliveredQuantity === 0) {
+        console.log(`Skipping product ${product.productName}: deliveredQuantity is 0`);
         continue; // ข้ามสินค้าที่ยังไม่ส่งมอบ
       }
 
@@ -176,14 +164,21 @@ exports.receiveStock = async (req, res) => {
 
       // ✅ ระบบล็อตใหม่ - เพิ่มสต็อกใหม่ได้เสมอ ไม่ว่าสต็อกเก่าจะเหลือหรือไม่
 
+      // ตรวจสอบว่ามีการส่งมอบหรือไม่
+      const deliveredQty = item.deliveredQuantity || 0;
+      if (deliveredQty === 0) {
+        console.log(`Skipping product ${product.productName}: deliveredQuantity is 0`);
+        continue; // ข้ามสินค้าที่ยังไม่ส่งมอบ
+      }
+
       // คำนวณจำนวนสินค้าที่จะเพิ่มเป็นล็อต
       let quantityToAdd;
       if (item.pack && product.packSize) {
         // ถ้าเป็นแพ็ค ให้คูณด้วย packSize
-        quantityToAdd = (item.deliveredQuantity || item.orderedQuantity) * product.packSize;
+        quantityToAdd = deliveredQty * product.packSize;
       } else {
         // ถ้าเป็นชิ้น ใช้จำนวนปกติ
-        quantityToAdd = item.deliveredQuantity || item.orderedQuantity;
+        quantityToAdd = deliveredQty;
       }
 
       // ใช้ราคาจริงที่ส่งมอบ
@@ -217,17 +212,8 @@ exports.receiveStock = async (req, res) => {
     // ✅ เปลี่ยนสถานะของใบสั่งซื้อเป็น completed เมื่อเติมสินค้าทั้งหมดแล้ว
     purchaseOrder.status = "completed";
     
-    // อัพเดตสถานะการส่งมอบ
-    const totalOrdered = purchaseOrder.products.reduce((sum, p) => sum + p.orderedQuantity, 0);
-    const totalDelivered = purchaseOrder.products.reduce((sum, p) => sum + (p.deliveredQuantity || 0), 0);
-
-    if (totalDelivered === 0) {
-      purchaseOrder.deliveryStatus = "not_delivered";
-    } else if (totalDelivered < totalOrdered) {
-      purchaseOrder.deliveryStatus = "partially_delivered";
-    } else {
-      purchaseOrder.deliveryStatus = "fully_delivered";
-    }
+    // เมื่อเติมสินค้าแล้ว ให้สถานะเป็น "ส่งมอบครบแล้ว" เท่านั้น
+    purchaseOrder.deliveryStatus = "fully_delivered";
     
     await purchaseOrder.save();
 
@@ -364,7 +350,9 @@ exports.updatePurchaseOrder = async (req, res) => {
 
       // เก็บข้อมูลการส่งมอบเดิมไว้
       const existingProduct = existingPurchaseOrder.products.find(p => p.productId.toString() === item.productId);
-      const deliveredQuantity = item.deliveredQuantity !== undefined ? item.deliveredQuantity : (existingProduct ? existingProduct.deliveredQuantity : 0);
+      // ถ้า frontend ส่ง deliveredQuantity มา (รวมถึง 0) ให้ใช้ค่านั้น
+      // ถ้าไม่ได้ส่งมา ให้ใช้ค่าจากฐานข้อมูลเดิม
+      const deliveredQuantity = item.hasOwnProperty('deliveredQuantity') ? item.deliveredQuantity : (existingProduct ? existingProduct.deliveredQuantity : 0);
       const actualPrice = item.actualPrice !== undefined ? item.actualPrice : (existingProduct ? existingProduct.actualPrice : null);
       const deliveryDate = item.deliveryDate !== undefined ? item.deliveryDate : (existingProduct ? existingProduct.deliveryDate : null);
       const deliveryNotes = item.deliveryNotes !== undefined ? item.deliveryNotes : (existingProduct ? existingProduct.deliveryNotes : "");
@@ -854,7 +842,9 @@ exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
 
       // เก็บข้อมูลการส่งมอบเดิมไว้
       const existingProduct = existingPurchaseOrder.products.find(p => p.productId.toString() === item.productId);
-      const deliveredQuantity = item.deliveredQuantity !== undefined ? item.deliveredQuantity : (existingProduct ? existingProduct.deliveredQuantity : 0);
+      // ถ้า frontend ส่ง deliveredQuantity มา (รวมถึง 0) ให้ใช้ค่านั้น
+      // ถ้าไม่ได้ส่งมา ให้ใช้ค่าจากฐานข้อมูลเดิม
+      const deliveredQuantity = item.hasOwnProperty('deliveredQuantity') ? item.deliveredQuantity : (existingProduct ? existingProduct.deliveredQuantity : 0);
       const actualPrice = item.actualPrice !== undefined ? item.actualPrice : (existingProduct ? existingProduct.actualPrice : null);
       const deliveryDate = item.deliveryDate !== undefined ? item.deliveryDate : (existingProduct ? existingProduct.deliveryDate : null);
       const deliveryNotes = item.deliveryNotes !== undefined ? item.deliveryNotes : (existingProduct ? existingProduct.deliveryNotes : "");
@@ -905,12 +895,19 @@ exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
       //   continue;
       // }
 
+      // ตรวจสอบว่ามีการส่งมอบหรือไม่
+      const deliveredQty = item.deliveredQuantity || 0;
+      if (deliveredQty === 0) {
+        console.log(`Skipping product ${product.productName}: deliveredQuantity is 0`);
+        continue; // ข้ามสินค้าที่ยังไม่ส่งมอบ
+      }
+
       // คำนวณจำนวนสินค้าที่จะเพิ่มเป็นล็อต
       let quantityToAdd;
       if (item.pack && product.packSize) {
-        quantityToAdd = (item.deliveredQuantity || item.orderedQuantity) * product.packSize;
+        quantityToAdd = deliveredQty * product.packSize;
       } else {
-        quantityToAdd = item.deliveredQuantity || item.orderedQuantity;
+        quantityToAdd = deliveredQty;
       }
 
       // ใช้ราคาจริงที่ส่งมอบ
@@ -936,6 +933,11 @@ exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
         newTotal: product.totalQuantity
       });
     }
+
+    // เมื่อเติมสินค้าแล้ว ให้สถานะเป็น "ส่งมอบครบแล้ว" เท่านั้น
+    updatedPurchaseOrder.deliveryStatus = "fully_delivered";
+    
+    await updatedPurchaseOrder.save();
 
     res.status(200).json({ 
       message: "Purchase order updated and lots recreated successfully", 
