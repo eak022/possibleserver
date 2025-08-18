@@ -63,6 +63,14 @@ const createPaymentIntent = async (req, res) => {
       }
     });
 
+    // อัปเดต metadata ของ payment link ให้มี payment_link_id
+    await stripe.paymentLinks.update(paymentLink.id, {
+      metadata: {
+        ...paymentLink.metadata,
+        payment_link_id: paymentLink.id
+      }
+    });
+
     // ถ้ามี orderData ให้สร้าง Order ใหม่
     let order = null;
     if (orderData) {
@@ -137,16 +145,42 @@ const checkPaymentStatus = async (req, res) => {
     
     // ดึงข้อมูลการชำระเงินจาก Payment Link
     let paymentStatus = 'pending';
+    let paymentIntent = null;
+    
     if (paymentLink.active) {
-      // ตรวจสอบว่ามีการชำระเงินหรือไม่
-      const payments = await stripe.paymentIntents.list({
-        limit: 1,
-        payment_link: paymentLinkId
-      });
-      
-      if (payments.data.length > 0) {
-        const payment = payments.data[0];
-        paymentStatus = payment.status === 'succeeded' ? 'paid' : 'unpaid';
+      try {
+        // ใช้ checkout sessions แทน payment intents เพื่อตรวจสอบสถานะ
+        const sessions = await stripe.checkout.sessions.list({
+          limit: 100,
+          payment_link: paymentLinkId
+        });
+        
+        if (sessions.data.length > 0) {
+          const session = sessions.data[0];
+          if (session.payment_intent) {
+            paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent);
+            paymentStatus = paymentIntent.status === 'succeeded' ? 'paid' : 
+                          paymentIntent.status === 'processing' ? 'processing' : 'unpaid';
+          } else if (session.payment_status === 'paid') {
+            paymentStatus = 'paid';
+          }
+        }
+      } catch (listError) {
+        console.log('ไม่สามารถดึง checkout sessions ได้:', listError.message);
+        // ถ้าไม่สามารถดึง checkout sessions ได้ ให้ใช้วิธีเดิม
+        const payments = await stripe.paymentIntents.list({
+          limit: 100
+        });
+        
+        // กรอง payment intents ที่เกี่ยวข้องกับ payment link นี้
+        const relatedPayments = payments.data.filter(payment => 
+          payment.metadata && payment.metadata.payment_link_id === paymentLinkId
+        );
+        
+        if (relatedPayments.length > 0) {
+          paymentIntent = relatedPayments[0];
+          paymentStatus = paymentIntent.status === 'succeeded' ? 'paid' : 'unpaid';
+        }
       }
     } else {
       paymentStatus = 'expired';
@@ -160,7 +194,12 @@ const checkPaymentStatus = async (req, res) => {
         amount: paymentLink.line_items.data[0].price_data.unit_amount / 100,
         currency: paymentLink.line_items.data[0].price_data.currency,
         created: paymentLink.created,
-        metadata: paymentLink.metadata
+        metadata: paymentLink.metadata,
+        paymentIntent: paymentIntent ? {
+          id: paymentIntent.id,
+          status: paymentIntent.status,
+          amount: paymentIntent.amount / 100
+        } : null
       },
       message: 'ตรวจสอบสถานะการชำระเงินสำเร็จ'
     });
