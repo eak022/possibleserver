@@ -37,7 +37,19 @@ const OrderSchema = new Schema({
   paymentMethod: {
     type: String,
     required: true,
-    enum: ["Cash", "BankTransfer", "ตัดจำหน่าย"],
+    enum: ["Cash", "BankTransfer", "ตัดจำหน่าย", "Stripe"],
+  },
+  // ✅ ข้อมูลการชำระเงินด้วย Stripe
+  stripePayment: {
+    paymentIntentId: { type: String },
+    paymentStatus: { 
+      type: String, 
+      enum: ["pending", "succeeded", "failed", "canceled"],
+      default: "pending"
+    },
+    qrCodeUrl: { type: String },
+    paidAt: { type: Date },
+    failureReason: { type: String }
   },
   cash_received: { type: Number, default: 0 },
   change: { type: Number, default: 0 },

@@ -18,6 +18,8 @@ const productRouter  = require("./routes/product.router");
 const promotionRouter  = require("./routes/promotion.router");
 const statusRouter  = require("./routes/status.router");
 const notificationRouter = require('./routes/notification.router');
+const stripeRouter = require('./routes/stripe.router');
+const stripeController = require('./controllers/stripe.controller');
 const swaggerSetup = require('./docs/swagger');
 const { initializeStatuses } = require('./config/initialData');
 const authenticateToken = require("./middlewares/authJwt.middleware");
@@ -42,6 +44,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+
+// Stripe webhook must receive the raw body. Define it BEFORE JSON body parser.
+app.post('/api/v1/stripe/webhook', express.raw({ type: 'application/json' }), stripeController.handleWebhook);
+
+// JSON parsers for the rest of the routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -56,8 +63,10 @@ app.get("/", (req, res) => {
   res.send("<h1>Welcom to SE NPRU Blog resfull api</h1>");
 });
 
-app.use("/api/v1/auth", userRouter);
+app.use("/api/v1/auth", userRouter); // Stripe routes (webhook ไม่ต้อง auth)
 app.use(authenticateToken);
+// Stripe JSON routes should be after body parser (and before auth if desired). Keep them public.
+app.use("/api/v1/stripe", stripeRouter);
 app.use("/api/v1/cart", cartRouter);
 app.use("/api/v1/category", categoryRouter);
 app.use("/api/v1/order", orderRouter);
