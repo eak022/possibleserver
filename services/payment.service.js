@@ -3,11 +3,11 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 class PaymentService {
   // อัปเดตสถานะการชำระเงินใน Order
-  static async updateOrderPaymentStatus(orderId, sessionId, status, additionalData = {}) {
+  static async updateOrderPaymentStatus(orderId, paymentLinkId, status, additionalData = {}) {
     try {
       const updateData = {
         'stripePayment.paymentStatus': status,
-        'stripePayment.sessionId': sessionId
+        'stripePayment.paymentLinkId': paymentLinkId
       };
 
       // เพิ่มข้อมูลเพิ่มเติมตามสถานะ
@@ -40,15 +40,15 @@ class PaymentService {
   }
 
   // สร้าง Order ใหม่พร้อม Stripe Payment
-  static async createOrderWithStripePayment(orderData, sessionId, checkoutUrl) {
+  static async createOrderWithStripePayment(orderData, paymentLinkId, qrCodeUrl) {
     try {
       const order = new OrderModel({
         ...orderData,
         paymentMethod: 'Stripe',
         stripePayment: {
-          sessionId: sessionId,
+          paymentLinkId: paymentLinkId,
           paymentStatus: 'pending',
-          checkoutUrl: checkoutUrl
+          qrCodeUrl: qrCodeUrl
         }
       });
 
@@ -79,17 +79,34 @@ class PaymentService {
     }
   }
 
-  // ตรวจสอบสถานะการชำระเงินจาก Stripe Checkout Session
-  static async verifyStripePayment(sessionId) {
+  // ตรวจสอบสถานะการชำระเงินจาก Stripe Payment Link
+  static async verifyStripePayment(paymentLinkId) {
     try {
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      const paymentLink = await stripe.paymentLinks.retrieve(paymentLinkId);
+      
+      // ดึงข้อมูลการชำระเงินจาก Payment Link
+      let paymentStatus = 'pending';
+      if (paymentLink.active) {
+        const payments = await stripe.paymentIntents.list({
+          limit: 1,
+          payment_link: paymentLinkId
+        });
+        
+        if (payments.data.length > 0) {
+          const payment = payments.data[0];
+          paymentStatus = payment.status === 'succeeded' ? 'paid' : 'unpaid';
+        }
+      } else {
+        paymentStatus = 'expired';
+      }
+
       return {
-        id: session.id,
-        status: session.payment_status,
-        amount: session.amount_total / 100,
-        currency: session.currency,
-        created: session.created,
-        metadata: session.metadata
+        id: paymentLink.id,
+        status: paymentStatus,
+        amount: paymentLink.line_items.data[0].price_data.unit_amount / 100,
+        currency: paymentLink.line_items.data[0].price_data.currency,
+        created: paymentLink.created,
+        metadata: paymentLink.metadata
       };
     } catch (error) {
       console.error('Verify stripe payment error:', error);
@@ -98,12 +115,16 @@ class PaymentService {
   }
 
   // จัดการการชำระเงินสำเร็จ
-  static async handleSuccessfulPayment(session) {
+  static async handleSuccessfulPayment(paymentIntent) {
     try {
-      const orderId = session.metadata.orderId;
+      const orderId = paymentIntent.metadata.orderId;
       
       if (orderId && orderId !== 'unknown') {
-        await this.updateOrderPaymentStatus(orderId, session.id, 'paid');
+        // หา Payment Link ID จาก Order
+        const order = await OrderModel.findById(orderId);
+        if (order && order.stripePayment && order.stripePayment.paymentLinkId) {
+          await this.updateOrderPaymentStatus(orderId, order.stripePayment.paymentLinkId, 'paid');
+        }
         
         // TODO: เพิ่มการส่งการแจ้งเตือน
         // TODO: เพิ่มการอัปเดตสต็อก
@@ -117,14 +138,18 @@ class PaymentService {
   }
 
   // จัดการการชำระเงินล้มเหลว
-  static async handleFailedPayment(session) {
+  static async handleFailedPayment(paymentIntent) {
     try {
-      const orderId = session.metadata.orderId;
+      const orderId = paymentIntent.metadata.orderId;
       
       if (orderId && orderId !== 'unknown') {
-        await this.updateOrderPaymentStatus(orderId, session.id, 'unpaid', {
-          failureReason: 'การชำระเงินล้มเหลว'
-        });
+        // หา Payment Link ID จาก Order
+        const order = await OrderModel.findById(orderId);
+        if (order && order.stripePayment && order.stripePayment.paymentLinkId) {
+          await this.updateOrderPaymentStatus(orderId, order.stripePayment.paymentLinkId, 'unpaid', {
+            failureReason: 'การชำระเงินล้มเหลว'
+          });
+        }
         
         console.log(`Payment failed for order: ${orderId}`);
       }
@@ -135,12 +160,16 @@ class PaymentService {
   }
 
   // จัดการการยกเลิกการชำระเงิน
-  static async handleCanceledPayment(session) {
+  static async handleCanceledPayment(paymentIntent) {
     try {
-      const orderId = session.metadata.orderId;
+      const orderId = paymentIntent.metadata.orderId;
       
       if (orderId && orderId !== 'unknown') {
-        await this.updateOrderPaymentStatus(orderId, session.id, 'expired');
+        // หา Payment Link ID จาก Order
+        const order = await OrderModel.findById(orderId);
+        if (order && order.stripePayment && order.stripePayment.paymentLinkId) {
+          await this.updateOrderPaymentStatus(orderId, order.stripePayment.paymentLinkId, 'expired');
+        }
         
         console.log(`Payment canceled for order: ${orderId}`);
       }

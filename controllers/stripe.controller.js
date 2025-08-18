@@ -1,7 +1,7 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const PaymentService = require('../services/payment.service');
 
-// สร้าง Stripe Checkout Session สำหรับการชำระเงิน
+// สร้าง Stripe Payment Link สำหรับ PromptPay
 const createPaymentIntent = async (req, res) => {
   try {
     const { amount, currency = 'thb', orderId, description, orderData } = req.body;
@@ -37,9 +37,8 @@ const createPaymentIntent = async (req, res) => {
       });
     }
 
-    // สร้าง Stripe Checkout Session สำหรับ PromptPay เท่านั้น
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['promptpay'], // เฉพาะ PromptPay เท่านั้น
+    // สร้าง Stripe Payment Link สำหรับ PromptPay
+    const paymentLink = await stripe.paymentLinks.create({
       line_items: [{
         price_data: {
           currency: currency,
@@ -51,9 +50,13 @@ const createPaymentIntent = async (req, res) => {
         },
         quantity: 1
       }],
-      mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/cancel`,
+      payment_method_types: ['promptpay'], // เฉพาะ PromptPay เท่านั้น
+      after_completion: {
+        type: 'redirect',
+        redirect: {
+          url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/success?session_id={CHECKOUT_SESSION_ID}`
+        }
+      },
       metadata: {
         orderId: orderId || 'unknown',
         description: description || 'การชำระเงิน'
@@ -65,16 +68,16 @@ const createPaymentIntent = async (req, res) => {
     if (orderData) {
       order = await PaymentService.createOrderWithStripePayment(
         orderData,
-        session.id,
-        session.url
+        paymentLink.id, // ใช้ paymentLink.id แทน sessionId
+        paymentLink.url
       );
     }
 
     res.status(200).json({
       success: true,
       data: {
-        sessionId: session.id,
-        checkoutUrl: session.url,
+        paymentLinkId: paymentLink.id,
+        qrCodeUrl: paymentLink.url, // URL ที่มี QR Code ของ Stripe โดยตรง
         amount: amount,
         currency: currency,
         order: order
@@ -83,7 +86,7 @@ const createPaymentIntent = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Stripe Checkout Session Error:', error);
+    console.error('Stripe Payment Link Error:', error);
     
     // จัดการ error ที่เฉพาะเจาะจง
     if (error.type === 'StripeCardError') {
@@ -118,35 +121,52 @@ const createPaymentIntent = async (req, res) => {
 
 
 
-// ตรวจสอบสถานะการชำระเงินจาก Checkout Session
-const checkSessionStatus = async (req, res) => {
+// ตรวจสอบสถานะการชำระเงินจาก Payment Link
+const checkPaymentStatus = async (req, res) => {
   try {
-    const { sessionId } = req.params;
+    const { paymentLinkId } = req.params;
 
-    if (!sessionId) {
+    if (!paymentLinkId) {
       return res.status(400).json({
         success: false,
-        message: 'ต้องระบุ Session ID'
+        message: 'ต้องระบุ Payment Link ID'
       });
     }
 
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const paymentLink = await stripe.paymentLinks.retrieve(paymentLinkId);
+    
+    // ดึงข้อมูลการชำระเงินจาก Payment Link
+    let paymentStatus = 'pending';
+    if (paymentLink.active) {
+      // ตรวจสอบว่ามีการชำระเงินหรือไม่
+      const payments = await stripe.paymentIntents.list({
+        limit: 1,
+        payment_link: paymentLinkId
+      });
+      
+      if (payments.data.length > 0) {
+        const payment = payments.data[0];
+        paymentStatus = payment.status === 'succeeded' ? 'paid' : 'unpaid';
+      }
+    } else {
+      paymentStatus = 'expired';
+    }
 
     res.status(200).json({
       success: true,
       data: {
-        sessionId: session.id,
-        status: session.payment_status,
-        amount: session.amount_total / 100,
-        currency: session.currency,
-        created: session.created,
-        metadata: session.metadata
+        paymentLinkId: paymentLink.id,
+        status: paymentStatus,
+        amount: paymentLink.line_items.data[0].price_data.unit_amount / 100,
+        currency: paymentLink.line_items.data[0].price_data.currency,
+        created: paymentLink.created,
+        metadata: paymentLink.metadata
       },
       message: 'ตรวจสอบสถานะการชำระเงินสำเร็จ'
     });
 
   } catch (error) {
-    console.error('Check Session Status Error:', error);
+    console.error('Check Payment Status Error:', error);
     res.status(500).json({
       success: false,
       message: 'เกิดข้อผิดพลาดในการตรวจสอบสถานะการชำระเงิน',
@@ -158,23 +178,25 @@ const checkSessionStatus = async (req, res) => {
 // ยกเลิกการชำระเงิน
 const cancelPayment = async (req, res) => {
   try {
-    const { sessionId } = req.params;
+    const { paymentLinkId } = req.params;
 
-    if (!sessionId) {
+    if (!paymentLinkId) {
       return res.status(400).json({
         success: false,
-        message: 'ต้องระบุ Session ID'
+        message: 'ต้องระบุ Payment Link ID'
       });
     }
 
-    // Expire the checkout session
-    const session = await stripe.checkout.sessions.expire(sessionId);
+    // Deactivate the payment link
+    const paymentLink = await stripe.paymentLinks.update(paymentLinkId, {
+      active: false
+    });
 
     res.status(200).json({
       success: true,
       data: {
-        sessionId: session.id,
-        status: session.status,
+        paymentLinkId: paymentLink.id,
+        status: 'expired',
         expiredAt: new Date()
       },
       message: 'ยกเลิกการชำระเงินสำเร็จ'
@@ -208,12 +230,16 @@ const handleWebhook = async (req, res) => {
 
   try {
     switch (event.type) {
-      case 'checkout.session.completed':
+      case 'payment_intent.succeeded':
         await handlePaymentSuccess(event.data.object);
         break;
       
-      case 'checkout.session.expired':
-        await handlePaymentExpired(event.data.object);
+      case 'payment_intent.payment_failed':
+        await handlePaymentFailure(event.data.object);
+        break;
+      
+      case 'payment_intent.canceled':
+        await handlePaymentCancel(event.data.object);
         break;
       
       default:
@@ -228,28 +254,38 @@ const handleWebhook = async (req, res) => {
 };
 
 // จัดการการชำระเงินสำเร็จ
-const handlePaymentSuccess = async (session) => {
+const handlePaymentSuccess = async (paymentIntent) => {
   try {
-    console.log('Payment succeeded:', session.id);
-    await PaymentService.handleSuccessfulPayment(session);
+    console.log('Payment succeeded:', paymentIntent.id);
+    await PaymentService.handleSuccessfulPayment(paymentIntent);
   } catch (error) {
     console.error('Handle payment success error:', error);
   }
 };
 
-// จัดการการชำระเงินหมดอายุ
-const handlePaymentExpired = async (session) => {
+// จัดการการชำระเงินล้มเหลว
+const handlePaymentFailure = async (paymentIntent) => {
   try {
-    console.log('Payment expired:', session.id);
-    await PaymentService.handleCanceledPayment(session);
+    console.log('Payment failed:', paymentIntent.id);
+    await PaymentService.handleFailedPayment(paymentIntent);
   } catch (error) {
-    console.error('Handle payment expired error:', error);
+    console.error('Handle payment failure error:', error);
+  }
+};
+
+// จัดการการยกเลิกการชำระเงิน
+const handlePaymentCancel = async (paymentIntent) => {
+  try {
+    console.log('Payment canceled:', paymentIntent.id);
+    await PaymentService.handleCanceledPayment(paymentIntent);
+  } catch (error) {
+    console.error('Handle payment cancel error:', error);
   }
 };
 
 module.exports = {
   createPaymentIntent,
-  checkSessionStatus,
+  checkPaymentStatus,
   cancelPayment,
   handleWebhook
 };

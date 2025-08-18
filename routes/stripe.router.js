@@ -5,11 +5,11 @@ const stripeController = require('../controllers/stripe.controller');
 // สร้างการชำระเงินใหม่ (ต้อง login)
 router.post('/create-payment-intent', stripeController.createPaymentIntent);
 
-// ตรวจสอบสถานะการชำระเงินจาก Checkout Session (ต้อง login)
-router.get('/session-status/:sessionId', stripeController.checkSessionStatus);
+// ตรวจสอบสถานะการชำระเงินจาก Payment Link (ต้อง login)
+router.get('/payment-status/:paymentLinkId', stripeController.checkPaymentStatus);
 
 // ยกเลิกการชำระเงิน (ต้อง login)
-router.post('/cancel-payment/:sessionId', stripeController.cancelPayment);
+router.post('/cancel-payment/:paymentLinkId', stripeController.cancelPayment);
 
 // Webhook is mounted at app-level in `index.js` before body parsers to preserve raw body
 
