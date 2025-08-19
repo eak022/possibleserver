@@ -54,11 +54,15 @@ const createPaymentIntent = async (req, res) => {
         currency: currency,
         payment_method_types: ['promptpay'], // เฉพาะ PromptPay เท่านั้น
         metadata: {
-          orderId: orderId || 'unknown',
+          // ❌ ไม่ใส่ orderId ตอนแรก - จะอัปเดตหลังจากสร้าง Order สำเร็จ
+          // orderId: orderId || 'unknown',
           description: description || 'การชำระเงิน',
           amount: amount.toString(),
           currency: currency,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          // ✅ เพิ่มข้อมูลที่จำเป็นสำหรับการสร้าง Order
+          cartData: orderData ? JSON.stringify(orderData) : null,
+          userName: orderData?.userName || 'Guest'
         }
         // ลบ payment_method_options ออกเพราะไม่รองรับใน PromptPay
       });
@@ -557,7 +561,7 @@ const handlePaymentSuccess = async (paymentIntent) => {
       console.log('✅ Processing successful payment for PromptPay...');
       
       // ✅ ตรวจสอบว่า Order ถูกสร้างแล้วหรือไม่
-      if (paymentIntent.metadata && paymentIntent.metadata.orderId) {
+      if (paymentIntent.metadata && paymentIntent.metadata.orderId && paymentIntent.metadata.orderId !== 'unknown') {
         console.log('⚠️ Order already exists:', paymentIntent.metadata.orderId);
         return;
       }
@@ -638,7 +642,7 @@ const handleCheckoutSessionCompleted = async (session) => {
       const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent);
       
       // ✅ ตรวจสอบว่า Order ถูกสร้างแล้วหรือไม่
-      if (paymentIntent.metadata && paymentIntent.metadata.orderId) {
+      if (paymentIntent.metadata && paymentIntent.metadata.orderId && paymentIntent.metadata.orderId !== 'unknown') {
         console.log('Order already exists from checkout session:', paymentIntent.metadata.orderId);
         return;
       }
@@ -698,7 +702,7 @@ const handleChargeSucceeded = async (charge) => {
         // ตรวจสอบว่า payment intent นี้ยังไม่ถูกประมวลผล
         if (paymentIntent.status === 'succeeded') {
           // ✅ ตรวจสอบว่า Order ถูกสร้างแล้วหรือไม่
-          if (paymentIntent.metadata && paymentIntent.metadata.orderId) {
+          if (paymentIntent.metadata && paymentIntent.metadata.orderId && paymentIntent.metadata.orderId !== 'unknown') {
             console.log('Order already exists from charge:', paymentIntent.metadata.orderId);
             return;
           }
