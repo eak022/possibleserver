@@ -382,23 +382,58 @@ class PaymentService {
   // จัดการการชำระเงินล้มเหลว
   static async handleFailedPayment(paymentIntent) {
     try {
-      const orderId = paymentIntent.metadata.orderId;
+      console.log('🔴 Processing failed payment for:', paymentIntent.id);
+      console.log('📋 Payment intent metadata:', paymentIntent.metadata);
+      
+      const orderId = paymentIntent.metadata?.orderId;
       
       if (orderId && orderId !== 'unknown') {
-        // หา Payment Link ID จาก Order
+        console.log('🔍 Looking for order with ID:', orderId);
+        
+        // ✅ ตรวจสอบว่า orderId เป็น MongoDB ObjectId ที่ถูกต้อง
+        if (!this.isValidObjectId(orderId)) {
+          console.error('❌ Invalid orderId format:', orderId);
+          console.error('❌ Expected MongoDB ObjectId format (24 hex characters)');
+          return;
+        }
+        
+        // หา Order จากฐานข้อมูล
         const order = await OrderModel.findById(orderId);
         if (order && order.stripePayment && order.stripePayment.paymentIntentId) {
+          console.log('✅ Found order, updating payment status...');
           await this.updateOrderPaymentStatus(orderId, order.stripePayment.paymentIntentId, 'unpaid', {
             failureReason: 'การชำระเงินล้มเหลว'
           });
+          console.log(`✅ Payment failed status updated for order: ${orderId}`);
+        } else {
+          console.log(`⚠️ Order not found or no stripe payment info: ${orderId}`);
         }
         
-        console.log(`Payment failed for order: ${orderId}`);
+        console.log(`🔴 Payment failed processing completed for order: ${orderId}`);
+      } else {
+        console.log('⚠️ No valid orderId in payment intent metadata');
       }
     } catch (error) {
-      console.error('Handle failed payment error:', error);
-      throw error;
+      console.error('❌ Handle failed payment error:', error);
+      console.error('🔍 Error details:', {
+        errorType: error.name,
+        errorMessage: error.message,
+        paymentIntentId: paymentIntent.id,
+        metadata: paymentIntent.metadata
+      });
+      // ไม่ throw error เพื่อไม่ให้ webhook ล้มเหลว
     }
+  }
+
+  // ✅ ฟังก์ชันตรวจสอบ MongoDB ObjectId
+  static isValidObjectId(id) {
+    if (!id || typeof id !== 'string') {
+      return false;
+    }
+    
+    // MongoDB ObjectId ต้องเป็น 24 ตัวอักษร hex string
+    const objectIdPattern = /^[0-9a-fA-F]{24}$/;
+    return objectIdPattern.test(id);
   }
 
   // ✅ สร้าง Order จากข้อมูลตะกร้า (ใช้เมื่อชำระเงินสำเร็จเท่านั้น)
@@ -590,19 +625,44 @@ class PaymentService {
   // จัดการการยกเลิกการชำระเงิน
   static async handleCanceledPayment(paymentIntent) {
     try {
-      const orderId = paymentIntent.metadata.orderId;
+      console.log('🟡 Processing canceled payment for:', paymentIntent.id);
+      console.log('📋 Payment intent metadata:', paymentIntent.metadata);
+      
+      const orderId = paymentIntent.metadata?.orderId;
       
       if (orderId && orderId !== 'unknown') {
-        // หา Payment Link ID จาก Order
-        const order = await OrderModel.findById(orderId);
-        if (order && order.stripePayment && order.stripePayment.paymentIntentId) {
-          await this.updateOrderPaymentStatus(orderId, order.stripePayment.paymentIntentId, 'expired');
+        console.log('🔍 Looking for order with ID:', orderId);
+        
+        // ✅ ตรวจสอบว่า orderId เป็น MongoDB ObjectId ที่ถูกต้อง
+        if (!this.isValidObjectId(orderId)) {
+          console.error('❌ Invalid orderId format:', orderId);
+          console.error('❌ Expected MongoDB ObjectId format (24 hex characters)');
+          return;
         }
         
-        console.log(`Payment canceled for order: ${orderId}`);
+        // หา Order จากฐานข้อมูล
+        const order = await OrderModel.findById(orderId);
+        if (order && order.stripePayment && order.stripePayment.paymentIntentId) {
+          console.log('✅ Found order, updating payment status...');
+          await this.updateOrderPaymentStatus(orderId, order.stripePayment.paymentIntentId, 'expired');
+          console.log(`✅ Payment canceled status updated for order: ${orderId}`);
+        } else {
+          console.log(`⚠️ Order not found or no stripe payment info: ${orderId}`);
+        }
+        
+        console.log(`🟡 Payment canceled processing completed for order: ${orderId}`);
+      } else {
+        console.log('⚠️ No valid orderId in payment intent metadata');
       }
     } catch (error) {
-      console.error('Handle canceled payment error:', error);
+      console.error('❌ Handle canceled payment error:', error);
+      console.error('🔍 Error details:', {
+        errorType: error.name,
+        errorMessage: error.message,
+        paymentIntentId: paymentIntent.id,
+        metadata: paymentIntent.metadata
+      });
+      // ไม่ throw error เพื่อไม่ให้ webhook ล้มเหลว
     }
   }
 }
