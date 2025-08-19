@@ -2,7 +2,6 @@ const OrderModel = require('../models/Order');
 const CartModel = require('../models/Cart');
 const ProductModel = require('../models/Product');
 const PromotionModel = require('../models/Promotion');
-const { checkAndAddStock } = require('../controllers/purchaseOrder.controller');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 class PaymentService {
@@ -43,42 +42,104 @@ class PaymentService {
     }
   }
 
-  // สร้าง Order ใหม่พร้อม Stripe Payment
+  // สร้าง Order ใหม่พร้อม Stripe Payment - แก้ให้เป็น BankTransfer
   static async createOrderWithStripePayment(orderData, paymentIntentId, qrCodeUrl) {
     try {
-      // ✅ ตรวจสอบว่าสินค้าในสต็อกเพียงพอหรือไม่
-      for (const item of orderData.products) {
+      // ดึงสินค้าจากตะกร้าของผู้ใช้
+      const cartItems = await CartModel.find({ userName: orderData.userName });
+      if (cartItems.length === 0) {
+        throw new Error('Cart is empty');
+      }
+
+      // ตรวจสอบว่าสินค้าในสต็อกเพียงพอหรือไม่
+      for (const item of cartItems) {
         const product = await ProductModel.findById(item.productId);
         if (!product) {
           throw new Error(`Product ${item.productName} not found`);
         }
 
         let requiredQuantity = item.quantity;
-        // ถ้า pack เป็น true คูณจำนวนด้วย packSize ก่อน
-        if (item.pack && product.packSize) {
+        if (item.pack) {
           requiredQuantity *= product.packSize;
         }
 
-        // ตรวจสอบจำนวนสินค้าคงเหลือในสต็อกจาก totalQuantity (รวมทุกล็อต)
         if (product.totalQuantity < requiredQuantity) {
           throw new Error(`Not enough stock for ${item.productName}. Available: ${product.totalQuantity}, Required: ${requiredQuantity}`);
         }
       }
 
-      // ✅ ตัดสต็อกสินค้าทั้งหมดก่อนสร้างออร์เดอร์
+      // คำนวณราคาทั้งหมดและโปรโมชั่น
+      let subtotal = 0;
+      let totalDiscount = 0;
       const products = [];
-      for (const item of orderData.products) {
-        const product = await ProductModel.findById(item.productId);
-        let requiredQuantity = item.quantity;
-        
-        // ถ้า pack เป็น true คูณจำนวนด้วย packSize ก่อน
-        if (item.pack && product.packSize) {
-          requiredQuantity *= product.packSize;
+      const appliedPromotions = [];
+      
+      for (const item of cartItems) {
+        const currentProduct = await ProductModel.findById(item.productId);
+        if (!currentProduct) {
+          throw new Error(`Product ${item.productName} not found`);
         }
 
-        // ✅ ตัดสต็อกสินค้าแบบ FIFO (First In, First Out)
+        let requiredQuantity = item.quantity;
+        if (item.pack) {
+          requiredQuantity *= currentProduct.packSize;
+        }
+
+        // ใช้ราคาทุนจาก ProductModel
+        const purchasePrice = item.pack 
+          ? (currentProduct.averagePurchasePrice || 0) * currentProduct.packSize
+          : (currentProduct.averagePurchasePrice || 0);
+
+        // ตีความโปรโมชันจากบรรทัดในตะกร้า
+        const nowDate = new Date();
+        let finalPrice = item.price;
+        let itemDiscount = 0;
+        let promoDocForLine = null;
+        if (item.promotionId) {
+          const promoById = await PromotionModel.findById(item.promotionId);
+          if (promoById && promoById.productId?.toString() === item.productId.toString() && new Date(promoById.validityStart) <= nowDate && nowDate <= new Date(promoById.validityEnd)) {
+            promoDocForLine = promoById;
+            finalPrice = promoById.discountedPrice;
+            itemDiscount = (item.price - promoById.discountedPrice) * item.quantity;
+            totalDiscount += itemDiscount;
+            appliedPromotions.push({
+              productId: promoById._id,
+              promotionName: promoById.promotionName,
+              discountedPrice: promoById.discountedPrice,
+              originalPrice: item.price,
+              discountAmount: itemDiscount
+            });
+          }
+        }
+
+        subtotal += finalPrice * item.quantity;
+        products.push({
+          productId: item.productId,
+          image: item.image,
+          productName: item.name,
+          quantity: item.quantity,
+          purchasePrice: purchasePrice,
+          sellingPricePerUnit: finalPrice,
+          pack: item.pack,
+          originalPrice: item.price,
+          discountAmount: itemDiscount,
+          packSize: currentProduct.packSize
+        });
+
+        // ✅ ตัดสต็อกสินค้าแบบ FIFO (เหมือน order controller)
         const productToReduce = await ProductModel.findById(item.productId);
-        const reductionResult = productToReduce.reduceLotQuantity(requiredQuantity);
+        let options = {};
+        const activePromoForProduct = await PromotionModel.findOne({
+          productId: item.productId,
+          validityStart: { $lte: nowDate },
+          validityEnd: { $gte: nowDate }
+        }).lean();
+        if (item.promotionId && promoDocForLine && Array.isArray(promoDocForLine.appliedLots) && promoDocForLine.appliedLots.length > 0) {
+          options.includeOnlyLotNumbers = promoDocForLine.appliedLots;
+        } else if (activePromoForProduct && Array.isArray(activePromoForProduct.appliedLots) && activePromoForProduct.appliedLots.length > 0) {
+          options.excludeLotNumbers = activePromoForProduct.appliedLots;
+        }
+        const reductionResult = productToReduce.reduceLotQuantity(requiredQuantity, options);
         
         if (!reductionResult.success) {
           throw new Error(`Failed to reduce stock for ${item.productName}. Shortage: ${reductionResult.remainingShortage}`);
@@ -98,20 +159,25 @@ class PaymentService {
         });
 
         // อัปเดตข้อมูลสินค้าใน products array
-        products.push({
-          ...item,
-          lotsUsed: lotsUsed
-        });
-
-        // ตรวจสอบและเติมสต็อกอัตโนมัติหลังจากตัดสต็อก
-        await checkAndAddStock(item.productId);
+        const productIndex = products.findIndex(p => p.productId === item.productId);
+        if (productIndex !== -1) {
+          products[productIndex].lotsUsed = lotsUsed;
+        }
       }
 
-      // ✅ สร้างออร์เดอร์พร้อมข้อมูลล็อตที่ใช้
+      const total = subtotal;
+
+      // สร้าง Order ใหม่ด้วย paymentMethod เป็น "BankTransfer"
       const order = new OrderModel({
-        ...orderData,
-        products: products, // ใช้ products ที่มี lotsUsed แล้ว
-        paymentMethod: 'Stripe',
+        userName: orderData.userName,
+        products,
+        subtotal,
+        total,
+        promotionId: appliedPromotions,
+        paymentMethod: 'BankTransfer', // เปลี่ยนจาก 'Stripe' เป็น 'BankTransfer'
+        cash_received: 0,
+        change: 0,
+        orderDate: new Date(),
         stripePayment: {
           paymentIntentId: paymentIntentId,
           paymentStatus: 'pending',
@@ -121,10 +187,8 @@ class PaymentService {
 
       const savedOrder = await order.save();
 
-      // ✅ ล้างตะกร้าหลังจากสร้างออร์เดอร์สำเร็จ
-      if (orderData.userName) {
-        await CartModel.deleteMany({ userName: orderData.userName });
-      }
+      // ✅ เคลียร์ตะกร้าหลังจากสร้าง order สำเร็จ
+      await CartModel.deleteMany({ userName: orderData.userName });
 
       return savedOrder;
     } catch (error) {
@@ -210,30 +274,34 @@ class PaymentService {
         return;
       }
       
-      // ✅ หาออร์เดอร์ที่เกี่ยวข้องกับ payment intent นี้
-      const order = await OrderModel.findOne({
-        'stripePayment.paymentIntentId': paymentIntent.id
-      });
+      const orderId = paymentIntent.metadata?.orderId;
       
-      if (order) {
-        // ✅ อัปเดตสถานะการชำระเงินเป็น 'paid'
-        await this.updateOrderPaymentStatus(order._id, paymentIntent.id, 'paid');
+      if (orderId && orderId !== 'unknown') {
+        // หา Order และอัปเดตสถานะ
+        const order = await OrderModel.findById(orderId);
+        if (order && order.stripePayment && order.stripePayment.paymentIntentId) {
+          await this.updateOrderPaymentStatus(orderId, order.stripePayment.paymentIntentId, 'paid');
+          
+          // อัปเดต metadata เพื่อป้องกันการประมวลผลซ้ำ
+          await stripe.paymentIntents.update(paymentIntent.id, {
+            metadata: { ...paymentIntent.metadata, processed: 'true' }
+          });
+        }
         
-        // ✅ อัปเดตสถานะออร์เดอร์เป็น 'ขายสำเร็จ'
-        await OrderModel.findByIdAndUpdate(order._id, {
-          orderStatus: 'ขายสำเร็จ'
-        });
+        // ✅ เคลียร์ตะกร้าหลังจากชำระเงินสำเร็จ (ถ้ายังไม่ได้เคลียร์)
+        if (order && order.userName) {
+          try {
+            await CartModel.deleteMany({ userName: order.userName });
+            console.log(`Cart cleared for user: ${order.userName}`);
+          } catch (cartError) {
+            console.error('Error clearing cart:', cartError);
+          }
+        }
         
-        console.log(`Payment successful for order: ${order._id}`);
+        console.log(`Payment successful for order: ${orderId}`);
       } else {
-        console.log('No order found for payment intent:', paymentIntent.id);
+        console.log('No valid order ID found in payment intent metadata');
       }
-      
-      // อัปเดต metadata เพื่อป้องกันการประมวลผลซ้ำ
-      await stripe.paymentIntents.update(paymentIntent.id, {
-        metadata: { ...paymentIntent.metadata, processed: 'true' }
-      });
-      
     } catch (error) {
       console.error('Handle successful payment error:', error);
       // ไม่ throw error เพื่อไม่ให้ webhook ล้มเหลว
@@ -243,100 +311,42 @@ class PaymentService {
   // จัดการการชำระเงินล้มเหลว
   static async handleFailedPayment(paymentIntent) {
     try {
-      console.log('Processing failed payment for:', paymentIntent.id);
+      const orderId = paymentIntent.metadata.orderId;
       
-      // ✅ หาออร์เดอร์ที่เกี่ยวข้องกับ payment intent นี้
-      const order = await OrderModel.findOne({
-        'stripePayment.paymentIntentId': paymentIntent.id
-      });
-      
-      if (order) {
-        // ✅ อัปเดตสถานะการชำระเงินเป็น 'unpaid'
-        await this.updateOrderPaymentStatus(order._id, paymentIntent.id, 'unpaid', {
-          failureReason: 'การชำระเงินล้มเหลว'
-        });
-        
-        // ✅ อัปเดตสถานะออร์เดอร์เป็น 'ยกเลิก'
-        await OrderModel.findByIdAndUpdate(order._id, {
-          orderStatus: 'ยกเลิก'
-        });
-        
-        // ✅ คืนสต็อกสินค้าตามล็อตที่ใช้
-        for (const item of order.products) {
-          if (item.lotsUsed && item.lotsUsed.length > 0) {
-            // คืนสต็อกตามล็อตที่ใช้ในการขาย
-            for (const lotUsed of item.lotsUsed) {
-              const product = await ProductModel.findById(item.productId);
-              if (product) {
-                const lot = product.lots.find(l => l.lotNumber === lotUsed.lotNumber);
-                if (lot) {
-                  lot.quantity += lotUsed.quantityTaken;
-                  if (lot.status === 'depleted' && lot.quantity > 0) {
-                    lot.status = 'active';
-                  }
-                  await product.save();
-                }
-              }
-            }
-          }
+      if (orderId && orderId !== 'unknown') {
+        // หา Payment Link ID จาก Order
+        const order = await OrderModel.findById(orderId);
+        if (order && order.stripePayment && order.stripePayment.paymentIntentId) {
+          await this.updateOrderPaymentStatus(orderId, order.stripePayment.paymentIntentId, 'unpaid', {
+            failureReason: 'การชำระเงินล้มเหลว'
+          });
         }
         
-        console.log(`Payment failed for order: ${order._id}, stock restored`);
+        console.log(`Payment failed for order: ${orderId}`);
       }
-      
     } catch (error) {
       console.error('Handle failed payment error:', error);
-      // ไม่ throw error เพื่อไม่ให้ webhook ล้มเหลว
+      throw error;
     }
   }
 
-  // จัดการการชำระเงินที่ถูกยกเลิก
+  // จัดการการยกเลิกการชำระเงิน
   static async handleCanceledPayment(paymentIntent) {
     try {
-      console.log('Processing canceled payment for:', paymentIntent.id);
+      const orderId = paymentIntent.metadata.orderId;
       
-      // ✅ หาออร์เดอร์ที่เกี่ยวข้องกับ payment intent นี้
-      const order = await OrderModel.findOne({
-        'stripePayment.paymentIntentId': paymentIntent.id
-      });
-      
-      if (order) {
-        // ✅ อัปเดตสถานะการชำระเงินเป็น 'expired'
-        await this.updateOrderPaymentStatus(order._id, paymentIntent.id, 'expired', {
-          failureReason: 'การชำระเงินถูกยกเลิก'
-        });
-        
-        // ✅ อัปเดตสถานะออร์เดอร์เป็น 'ยกเลิก'
-        await OrderModel.findByIdAndUpdate(order._id, {
-          orderStatus: 'ยกเลิก'
-        });
-        
-        // ✅ คืนสต็อกสินค้าตามล็อตที่ใช้
-        for (const item of order.products) {
-          if (item.lotsUsed && item.lotsUsed.length > 0) {
-            // คืนสต็อกตามล็อตที่ใช้ในการขาย
-            for (const lotUsed of item.lotsUsed) {
-              const product = await ProductModel.findById(item.productId);
-              if (product) {
-                const lot = product.lots.find(l => l.lotNumber === lotUsed.lotNumber);
-                if (lot) {
-                  lot.quantity += lotUsed.quantityTaken;
-                  if (lot.status === 'depleted' && lot.quantity > 0) {
-                    lot.status = 'active';
-                  }
-                  await product.save();
-                }
-              }
-            }
-          }
+      if (orderId && orderId !== 'unknown') {
+        // หา Payment Link ID จาก Order
+        const order = await OrderModel.findById(orderId);
+        if (order && order.stripePayment && order.stripePayment.paymentIntentId) {
+          await this.updateOrderPaymentStatus(orderId, order.stripePayment.paymentIntentId, 'expired');
         }
         
-        console.log(`Payment canceled for order: ${order._id}, stock restored`);
+        console.log(`Payment canceled for order: ${orderId}`);
       }
-      
     } catch (error) {
       console.error('Handle canceled payment error:', error);
-      // ไม่ throw error เพื่อไม่ให้ webhook ล้มเหลว
+      throw error;
     }
   }
 }

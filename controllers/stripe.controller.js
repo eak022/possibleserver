@@ -6,26 +6,27 @@ const createPaymentIntent = async (req, res) => {
   try {
     const { amount, currency = 'thb', orderId, description, orderData } = req.body;
 
-    // Validation
-    if (!amount || amount <= 0) { // ตรวจสอบว่ามีจำนวนเงินและไม่ติดลบ
+    // Validation - ปรับเพดานตาม PromptPay บน Stripe
+    if (!amount || amount <= 0) {
       return res.status(400).json({
         success: false,
         message: 'จำนวนเงินต้องมากกว่า 0'
       });
     }
 
-    // ตรวจสอบขั้นต่ำสำหรับ QR Code (PromptPay)
+    // ตรวจสอบขั้นต่ำสำหรับ QR Code (PromptPay) - ปรับเป็น 10 บาท
     if (amount < 10) {
       return res.status(400).json({
         success: false,
-        message: 'QR Code ต้องมียอดขั้นต่ำ 10 บาท'
+        message: 'PromptPay ต้องมียอดขั้นต่ำ 10 บาท'
       });
     }
 
-    if (amount > 1000000) { // จำกัดจำนวนเงินไม่เกิน 1 ล้านบาท
+    // ปรับเพดานสูงสุดจาก 1,000,000 เป็น 150,000 ตาม PromptPay บน Stripe
+    if (amount > 150000) {
       return res.status(400).json({
         success: false,
-        message: 'จำนวนเงินต้องไม่เกิน 1,000,000 บาท'
+        message: 'PromptPay รับได้ไม่เกิน 150,000 บาทต่อครั้ง'
       });
     }
 
@@ -45,92 +46,150 @@ const createPaymentIntent = async (req, res) => {
       });
     }
 
-    // สร้าง Stripe Payment Intent สำหรับ PromptPay โดยตรง
+    // 1) สร้าง PaymentIntent
     let paymentIntent;
     try {
       paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(amount * 100),
+        amount: Math.round(amount * 100), // แปลงเป็นสตางค์
         currency: currency,
-        payment_method_types: ['promptpay'],
-        metadata: { 
-          orderId: orderId, 
-          description: description, 
-          amount: amount, 
-          currency: currency 
+        payment_method_types: ['promptpay'], // เฉพาะ PromptPay เท่านั้น
+        metadata: {
+          orderId: orderId || 'unknown',
+          description: description || 'การชำระเงิน',
+          amount: amount.toString(),
+          currency: currency,
+          createdAt: new Date().toISOString()
         }
+        // ลบ payment_method_options ออกเพราะไม่รองรับใน PromptPay
+      });
+
+      console.log('Stripe Payment Intent created:', {
+        id: paymentIntent.id,
+        amount: amount,
+        currency: currency,
+        status: paymentIntent.status,
+        metadata: paymentIntent.metadata
       });
     } catch (stripeError) {
-      console.error('Stripe API Error:', stripeError);
+      // จัดการ Stripe error โดยเฉพาะ
+      console.error('Stripe Payment Intent creation failed:', stripeError);
       
-      // จัดการ error เฉพาะของ Stripe
       if (stripeError.type === 'StripeInvalidRequestError') {
-        if (stripeError.message.includes('Amount must be no less than') || 
-            stripeError.message.includes('Amount must be at least')) {
-          return res.status(400).json({
-            success: false,
-            message: 'QR Code ต้องมียอดขั้นต่ำ 10 บาท'
-          });
+        let errorMessage = 'ข้อมูลไม่ถูกต้อง';
+        
+        if (stripeError.message.includes('Amount must be no less than')) {
+          errorMessage = 'PromptPay ต้องมียอดขั้นต่ำ 10 บาท';
+        } else if (stripeError.message.includes('Amount must be at least')) {
+          errorMessage = 'PromptPay ต้องมียอดขั้นต่ำ 10 บาท';
+        } else if (stripeError.message.includes('amount')) {
+          errorMessage = 'ข้อมูลจำนวนเงินไม่ถูกต้อง';
+        } else {
+          errorMessage = 'ข้อมูลไม่ถูกต้อง: ' + stripeError.message;
         }
+        
+        return res.status(400).json({
+          success: false,
+          message: errorMessage
+        });
       }
       
+      // ถ้าเป็น error อื่นๆ ให้ throw ต่อไป
+      throw stripeError;
+    }
+
+    // 2) ยืนยันให้เป็น PromptPay และให้ Stripe สร้าง QR
+    let confirmed;
+    try {
+      confirmed = await stripe.paymentIntents.confirm(paymentIntent.id, {
+        payment_method_data: { 
+          type: 'promptpay',
+          billing_details: {
+            email: process.env.DEFAULT_BILLING_EMAIL || '654259022@webmail.npru.ac.th'
+          }
+        },
+        return_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment-success`,
+      });
+
+      console.log('Payment Intent confirmed for PromptPay:', {
+        id: confirmed.id,
+        status: confirmed.status,
+        nextAction: confirmed.next_action
+      });
+    } catch (confirmError) {
+      console.error('Failed to confirm Payment Intent:', confirmError);
+      
+      // ถ้า confirm ไม่สำเร็จ ให้ลองใช้ Payment Intent ที่สร้างไว้แล้ว
+      console.log('Falling back to original Payment Intent');
+      confirmed = paymentIntent;
+    }
+
+    // 3) ดึง URL QR ของ Stripe จาก next_action
+    const qrAction = confirmed.next_action?.promptpay_display_qr_code;
+    
+    if (!qrAction) {
+      console.error('No QR code action found in confirmed payment intent');
       return res.status(500).json({
         success: false,
-        message: 'เกิดข้อผิดพลาดในการสร้างการชำระเงิน กรุณาลองใหม่อีกครั้ง'
+        message: 'ไม่สามารถสร้าง QR Code ได้ กรุณาลองใหม่อีกครั้ง'
       });
     }
 
-    const promptPayDisplayUrl = `https://promptpay.io/${process.env.PROMPTPAY_MERCHANT_ID || '8710776015604'}/${amount}`;
+    // ใช้ QR ของ Stripe เท่านั้น - ไม่ใช้ fallback
+    const qrCodeUrl = qrAction.image_url_png || qrAction.image_url_svg;
+    const promptPayUrl = qrAction.hosted_instructions_url;
+    
+    if (!qrCodeUrl) {
+      console.error('No QR image URL found in Stripe response');
+      return res.status(500).json({
+        success: false,
+        message: 'ไม่สามารถสร้าง QR Code ได้ กรุณาลองใหม่อีกครั้ง'
+      });
+    }
+    
+    console.log('QR Code generated by Stripe:', {
+      png: qrAction.image_url_png,
+      svg: qrAction.image_url_svg,
+      hosted: qrAction.hosted_instructions_url
+    });
 
-    // ✅ สร้าง Order ใหม่พร้อมตัดสต็อกทันที
+    // ถ้ามี orderData ให้สร้าง Order ใหม่
     let order = null;
+    let finalOrderId = orderId;
+    
     if (orderData) {
+      // สร้าง order ก่อนเพื่อให้ได้ orderId จริง
+      order = await PaymentService.createOrderWithStripePayment(
+        orderData,
+        confirmed.id, // ใช้ confirmed.id แทน paymentIntent.id
+        qrCodeUrl
+      );
+      
+      // ใช้ orderId จริงที่ได้จากการสร้าง order
+      finalOrderId = order._id.toString();
+      
+      // อัปเดต metadata ของ PaymentIntent ด้วย orderId จริง
       try {
-        order = await PaymentService.createOrderWithStripePayment(
-          orderData,
-          paymentIntent.id,
-          promptPayDisplayUrl
-        );
-        console.log('Order created successfully with stock reduction:', order._id);
-      } catch (orderError) {
-        console.error('Error creating order:', orderError);
-        
-        // ถ้าสร้างออร์เดอร์ไม่สำเร็จ ให้ยกเลิก payment intent
-        try {
-          await stripe.paymentIntents.cancel(paymentIntent.id);
-          console.log('Payment intent canceled due to order creation failure');
-        } catch (cancelError) {
-          console.error('Error canceling payment intent:', cancelError);
-        }
-        
-        return res.status(500).json({
-          success: false,
-          message: orderError.message || 'เกิดข้อผิดพลาดในการสร้างออร์เดอร์ กรุณาลองใหม่อีกครั้ง'
+        await stripe.paymentIntents.update(confirmed.id, {
+          metadata: {
+            ...paymentIntent.metadata,
+            orderId: finalOrderId
+          }
         });
+        console.log('Updated PaymentIntent metadata with real orderId:', finalOrderId);
+      } catch (updateError) {
+        console.error('Failed to update PaymentIntent metadata:', updateError);
       }
     }
-
-    // สร้าง QR Code URL สำหรับ PromptPay โดยตรง
-    // ใช้ Stripe PromptPay QR Code API
-    const qrCodeUrl = `https://api.stripe.com/v1/payment_intents/${paymentIntent.id}/confirm`;
-    
-    // สร้าง PromptPay QR Code URL ที่สามารถสแกนได้ทันที
-    // ใช้ format มาตรฐาน PromptPay: promptpay://merchantId/amount
-    const promptPayQRUrl = `promptpay://${process.env.PROMPTPAY_MERCHANT_ID || '8710776015604'}/${amount}`;
-    
-    // หรือใช้ URL สำหรับแสดง QR Code ในหน้าเว็บ
-    // const promptPayDisplayUrl = `https://promptpay.io/${process.env.PROMPTPAY_MERCHANT_ID || '8710776015604'}/${amount}`;
 
     res.status(200).json({
       success: true,
       data: {
-        paymentIntentId: paymentIntent.id,
-        qrCodeUrl: promptPayDisplayUrl, // URL สำหรับแสดง QR Code ในหน้าเว็บ
-        promptPayUrl: promptPayDisplayUrl, // URL สำหรับ PromptPay app
-        stripePaymentIntentUrl: promptPayDisplayUrl, // URL สำหรับ Stripe API
+        paymentIntentId: confirmed.id,
+        qrCodeUrl: qrCodeUrl, // URL รูป QR ของ Stripe (PNG/SVG)
+        promptPayUrl: promptPayUrl, // URL สำหรับ PromptPay app
         amount: amount,
         currency: currency,
-        status: paymentIntent.status,
-        merchantId: process.env.PROMPTPAY_MERCHANT_ID || '8710776015604',
+        status: confirmed.status,
         order: order
       },
       message: 'สร้างการชำระเงินสำเร็จ'
@@ -150,9 +209,9 @@ const createPaymentIntent = async (req, res) => {
       let errorMessage = 'ข้อมูลไม่ถูกต้อง';
       
       if (error.message.includes('Amount must be no less than')) {
-        errorMessage = 'QR Code ต้องมียอดขั้นต่ำ 10 บาท';
+        errorMessage = 'PromptPay ต้องมียอดขั้นต่ำ 10 บาท';
       } else if (error.message.includes('Amount must be at least')) {
-        errorMessage = 'QR Code ต้องมียอดขั้นต่ำ 10 บาท';
+        errorMessage = 'PromptPay ต้องมียอดขั้นต่ำ 10 บาท';
       } else if (error.message.includes('amount')) {
         errorMessage = 'ข้อมูลจำนวนเงินไม่ถูกต้อง';
       } else {
@@ -310,6 +369,9 @@ const cancelPayment = async (req, res) => {
   }
 };
 
+// เพิ่ม Set สำหรับเก็บ event IDs ที่ประมวลผลแล้ว (เก็บใน memory)
+const processedEventIds = new Set();
+
 // Webhook สำหรับรับการอัปเดตจาก Stripe
 const handleWebhook = async (req, res) => {
   const sig = req.headers['stripe-signature'];
@@ -339,7 +401,7 @@ const handleWebhook = async (req, res) => {
 
   try {
     event = stripe.webhooks.constructEvent(
-      req.body,
+      req.body, // raw Buffer จาก express.raw()
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
@@ -354,79 +416,61 @@ const handleWebhook = async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
+  // กันซ้ำด้วย event.id
+  if (processedEventIds.has(event.id)) {
+    console.log('Event already processed, skipping:', event.id);
+    return res.json({ received: true });
+  }
+
   try {
-    // ใช้ Set เพื่อป้องกันการประมวลผล events ซ้ำ
-    const processedEvents = new Set();
-    
     switch (event.type) {
       case 'payment_intent.succeeded':
         console.log('Processing payment_intent.succeeded event');
-        if (!processedEvents.has(event.data.object.id)) {
-          await handlePaymentSuccess(event.data.object);
-          processedEvents.add(event.data.object.id);
-        }
+        await handlePaymentSuccess(event.data.object);
         break;
       
       case 'payment_intent.payment_failed':
         console.log('Processing payment_intent.payment_failed event');
-        if (!processedEvents.has(event.data.object.id)) {
-          await handlePaymentFailure(event.data.object);
-          processedEvents.add(event.data.object.id);
-        }
+        await handlePaymentFailure(event.data.object);
         break;
       
       case 'payment_intent.canceled':
         console.log('Processing payment_intent.canceled event');
-        if (!processedEvents.has(event.data.object.id)) {
-          await handlePaymentCancel(event.data.object);
-          processedEvents.add(event.data.object.id);
-        }
+        await handlePaymentCancel(event.data.object);
         break;
       
       case 'payment_intent.created':
         console.log('Processing payment_intent.created event');
-        if (!processedEvents.has(event.data.object.id)) {
-          await handlePaymentIntentCreated(event.data.object);
-          processedEvents.add(event.data.object.id);
-        }
+        await handlePaymentIntentCreated(event.data.object);
         break;
       
       case 'checkout.session.completed':
         console.log('Processing checkout.session.completed event');
-        if (!processedEvents.has(event.data.object.id)) {
-          await handleCheckoutSessionCompleted(event.data.object);
-          processedEvents.add(event.data.object.id);
-        }
+        await handleCheckoutSessionCompleted(event.data.object);
         break;
       
       case 'checkout.session.expired':
         console.log('Processing checkout.session.expired event');
-        if (!processedEvents.has(event.data.object.id)) {
-          await handleCheckoutSessionExpired(event.data.object);
-          processedEvents.add(event.data.object.id);
-        }
+        await handleCheckoutSessionExpired(event.data.object);
         break;
       
       case 'charge.succeeded':
         console.log('Processing charge.succeeded event');
-        if (!processedEvents.has(event.data.object.id)) {
-          await handleChargeSucceeded(event.data.object);
-          processedEvents.add(event.data.object.id);
-        }
+        await handleChargeSucceeded(event.data.object);
         break;
       
       case 'charge.updated':
         console.log('Processing charge.updated event');
-        if (!processedEvents.has(event.data.object.id)) {
-          await handleChargeUpdated(event.data.object);
-          processedEvents.add(event.data.object.id);
-        }
+        await handleChargeUpdated(event.data.object);
         break;
       
       default:
         console.log(`Unhandled event type: ${event.type}`);
     }
 
+    // เพิ่ม event.id เข้า Set หลังจากประมวลผลสำเร็จ
+    processedEventIds.add(event.id);
+    
     res.json({ received: true });
   } catch (error) {
     console.error('Webhook handler error:', error);
@@ -455,13 +499,7 @@ const handlePaymentSuccess = async (paymentIntent) => {
 const handlePaymentFailure = async (paymentIntent) => {
   try {
     console.log('Payment failed:', paymentIntent.id);
-    
-    if (paymentIntent.status === 'requires_payment_method' || paymentIntent.status === 'canceled') {
-      await PaymentService.handleFailedPayment(paymentIntent);
-      console.log('Payment failure processed successfully for:', paymentIntent.id);
-    } else {
-      console.log('Payment intent not failed, skipping:', paymentIntent.status);
-    }
+    await PaymentService.handleFailedPayment(paymentIntent);
   } catch (error) {
     console.error('Handle payment failure error:', error);
   }
@@ -471,13 +509,7 @@ const handlePaymentFailure = async (paymentIntent) => {
 const handlePaymentCancel = async (paymentIntent) => {
   try {
     console.log('Payment canceled:', paymentIntent.id);
-    
-    if (paymentIntent.status === 'canceled') {
-      await PaymentService.handleCanceledPayment(paymentIntent);
-      console.log('Payment cancel processed successfully for:', paymentIntent.id);
-    } else {
-      console.log('Payment intent not canceled, skipping:', paymentIntent.status);
-    }
+    await PaymentService.handleCanceledPayment(paymentIntent);
   } catch (error) {
     console.error('Handle payment cancel error:', error);
   }

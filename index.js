@@ -8,6 +8,11 @@ const BASE_URL = process.env.BASE_URL;
 const PORT = process.env.PORT;
 const DB_URL = process.env.DB_URL;
 const API_URL = process.env.NODE_ENV === 'production' ? process.env.PROD_API_URL : process.env.DEV_API_URL;
+
+// Set default billing email for Stripe if not provided in .env
+if (!process.env.DEFAULT_BILLING_EMAIL) {
+  process.env.DEFAULT_BILLING_EMAIL = '654259022@webmail.npru.ac.th';
+}
 const userRouter = require("./routes/user.router");
 const supplierRouter = require("./routes/supplier.router");
 const purchaseOrderRouter  = require("./routes/purchaseOrder.router");
