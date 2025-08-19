@@ -7,7 +7,8 @@ const app = express();
 const BASE_URL = process.env.BASE_URL;
 const PORT = process.env.PORT;
 const DB_URL = process.env.DB_URL;
-const API_URL = process.env.NODE_ENV === 'production' ? process.env.PROD_API_URL : process.env.DEV_API_URL;
+const API_URL = process.env.API_URL;
+//process.env.NODE_ENV === 'production' ? process.env.PROD_API_URL : process.env.DEV_API_URL;
 
 // Set default billing email for Stripe if not provided in .env
 if (!process.env.DEFAULT_BILLING_EMAIL) {
