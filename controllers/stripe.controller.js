@@ -381,15 +381,22 @@ const handleWebhook = async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
 
-  // Debug logging
-  console.log('🔔 Webhook handler called with:', {
+  // Debug logging ที่ละเอียดขึ้น
+  console.log('🔍 Webhook handler called with:', {
     hasSignature: !!sig,
     signatureLength: sig ? sig.length : 0,
+    signaturePreview: sig ? sig.substring(0, 20) + '...' : 'none',
     hasBody: !!req.body,
     bodyType: typeof req.body,
     bodyLength: req.body ? req.body.length : 0,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ? 'set' : 'not set',
-    headers: Object.keys(req.headers)
+    webhookSecretPreview: process.env.STRIPE_WEBHOOK_SECRET ? 
+      process.env.STRIPE_WEBHOOK_SECRET.substring(0, 20) + '...' : 'none',
+    headers: {
+      'stripe-signature': req.headers['stripe-signature'] ? 'present' : 'missing',
+      'content-type': req.headers['content-type'],
+      'content-length': req.headers['content-length']
+    }
   });
 
   // Validate webhook secret
@@ -405,36 +412,20 @@ const handleWebhook = async (req, res) => {
   }
 
   try {
-    // ✅ ตรวจสอบว่า req.body เป็น Buffer หรือไม่
-    let rawBody = req.body;
+    console.log('🔐 Attempting to verify webhook signature...');
+    console.log('📝 Using webhook secret:', process.env.STRIPE_WEBHOOK_SECRET.substring(0, 20) + '...');
+    console.log('📝 Signature header:', sig.substring(0, 20) + '...');
+    console.log('📝 Body type:', typeof req.body);
+    console.log('📝 Body length:', req.body ? req.body.length : 0);
     
-    // ถ้า req.body เป็น string ให้แปลงเป็น Buffer
-    if (typeof req.body === 'string') {
-      rawBody = Buffer.from(req.body, 'utf8');
-      console.log('⚠️ Converting string body to Buffer');
-    }
-    
-    // ถ้า req.body เป็น object ให้แปลงเป็น Buffer
-    if (typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
-      rawBody = Buffer.from(JSON.stringify(req.body), 'utf8');
-      console.log('⚠️ Converting object body to Buffer');
-    }
-
-    console.log('🔍 Body type for verification:', {
-      originalType: typeof req.body,
-      convertedType: typeof rawBody,
-      isBuffer: Buffer.isBuffer(rawBody),
-      bodyLength: rawBody.length
-    });
-
     event = stripe.webhooks.constructEvent(
-      rawBody, // ใช้ rawBody ที่แปลงแล้ว
+      req.body, // raw Buffer จาก express.raw()
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
     
     console.log('✅ Webhook signature verified successfully for event:', event.type);
-    console.log('📋 Event data:', {
+    console.log('📊 Event data:', {
       id: event.id,
       type: event.type,
       object: event.data?.object?.id,
@@ -446,28 +437,24 @@ const handleWebhook = async (req, res) => {
       errorType: err.type,
       errorCode: err.code,
       errorMessage: err.message,
-      webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ? 'set' : 'not set',
-      signatureHeader: sig,
-      bodyType: typeof req.body,
-      bodyLength: req.body ? req.body.length : 0
+      stack: err.stack
     });
     
-    // ✅ ส่ง error response ที่ชัดเจน
-    return res.status(400).json({
-      error: 'Webhook signature verification failed',
-      message: err.message,
-      details: {
-        errorType: err.type,
-        errorCode: err.code,
-        bodyType: typeof req.body,
-        bodyLength: req.body ? req.body.length : 0
-      }
+    // เพิ่มข้อมูลเพิ่มเติมสำหรับ debug
+    console.error('🔍 Debug info:', {
+      webhookSecretLength: process.env.STRIPE_WEBHOOK_SECRET?.length,
+      signatureLength: sig?.length,
+      bodyLength: req.body?.length,
+      bodyType: typeof req.body,
+      bodyIsBuffer: Buffer.isBuffer(req.body)
     });
+    
+    return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   // กันซ้ำด้วย event.id
   if (processedEventIds.has(event.id)) {
-    console.log('Event already processed, skipping:', event.id);
+    console.log('⚠️ Event already processed, skipping:', event.id);
     return res.json({ received: true });
   }
 
@@ -475,7 +462,7 @@ const handleWebhook = async (req, res) => {
     switch (event.type) {
       case 'payment_intent.succeeded':
         console.log('🟢 Processing payment_intent.succeeded event');
-        console.log('Event details:', {
+        console.log('📋 Event details:', {
           eventId: event.id,
           paymentIntentId: event.data.object.id,
           status: event.data.object.status,
@@ -533,7 +520,7 @@ const handleWebhook = async (req, res) => {
       default:
         console.log(`❓ Unhandled event type: ${event.type}`);
         // Log ข้อมูลเพิ่มเติมสำหรับ event ที่ไม่รู้จัก
-        console.log('Unknown event data:', {
+        console.log('📝 Unknown event data:', {
           eventType: event.type,
           eventId: event.id,
           objectId: event.data?.object?.id,
@@ -546,7 +533,8 @@ const handleWebhook = async (req, res) => {
     
     res.json({ received: true });
   } catch (error) {
-    console.error('Webhook handler error:', error);
+    console.error('❌ Webhook handler error:', error);
+    console.error('🔍 Error stack:', error.stack);
     res.status(500).json({ error: 'Webhook handler failed' });
   }
 };
@@ -585,12 +573,23 @@ const handlePaymentSuccess = async (paymentIntent) => {
       }
       
       console.log('🔍 Metadata validation passed, creating order...');
+      console.log('📝 Cart data preview:', paymentIntent.metadata.cartData.substring(0, 100) + '...');
+      console.log('👤 User name:', paymentIntent.metadata.userName);
+      
       const order = await PaymentService.handleSuccessfulPayment(paymentIntent);
       
       if (order) {
         console.log('✅ Order created successfully:', order._id);
+        console.log('📊 Order details:', {
+          orderId: order._id,
+          userName: order.userName,
+          totalAmount: order.total,
+          orderStatus: order.orderStatus,
+          paymentStatus: order.stripePayment?.paymentStatus
+        });
       } else {
         console.error('❌ Failed to create order for payment intent:', paymentIntent.id);
+        console.error('❌ Payment intent metadata:', paymentIntent.metadata);
       }
       console.log('✅ Payment success processed successfully for:', paymentIntent.id);
     } else {
@@ -602,6 +601,12 @@ const handlePaymentSuccess = async (paymentIntent) => {
     }
   } catch (error) {
     console.error('❌ Handle payment success error:', error);
+    console.error('🔍 Error stack:', error.stack);
+    console.error('📝 Payment intent that caused error:', {
+      id: paymentIntent.id,
+      status: paymentIntent.status,
+      metadata: paymentIntent.metadata
+    });
   }
 };
 

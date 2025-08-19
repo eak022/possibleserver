@@ -216,7 +216,8 @@ class PaymentService {
       console.log('🔍 Extracted metadata:', {
         hasCartData: !!cartData,
         hasUserName: !!userName,
-        userName: userName
+        userName: userName,
+        cartDataLength: cartData ? cartData.length : 0
       });
       
       if (cartData && userName) {
@@ -226,7 +227,12 @@ class PaymentService {
           console.log('✅ Cart data parsed successfully:', {
             itemCount: parsedCartData.cartItems?.length,
             totalAmount: parsedCartData.totalAmount,
-            userName: parsedCartData.userName
+            userName: parsedCartData.userName,
+            cartItems: parsedCartData.cartItems?.map(item => ({
+              productName: item.productName,
+              quantity: item.quantity,
+              price: item.price
+            }))
           });
           
           console.log('🏗️ Creating order from cart data...');
@@ -234,26 +240,40 @@ class PaymentService {
           
           if (order) {
             console.log('✅ Order created successfully:', order._id);
+            console.log('📊 Order details:', {
+              orderId: order._id,
+              userName: order.userName,
+              totalAmount: order.total,
+              orderStatus: order.orderStatus,
+              productCount: order.products?.length
+            });
             
             // อัปเดต metadata เพื่อป้องกันการประมวลผลซ้ำ
             console.log('🔧 Updating payment intent metadata...');
-            await stripe.paymentIntents.update(paymentIntent.id, {
-              metadata: { 
-                ...paymentIntent.metadata, 
-                processed: 'true',
-                orderId: order._id.toString()
-              }
-            });
+            try {
+              await stripe.paymentIntents.update(paymentIntent.id, {
+                metadata: { 
+                  ...paymentIntent.metadata, 
+                  processed: 'true',
+                  orderId: order._id.toString()
+                }
+              });
+              console.log('✅ Metadata updated successfully');
+            } catch (updateError) {
+              console.error('⚠️ Failed to update metadata:', updateError.message);
+              // ไม่ throw error เพราะ Order ถูกสร้างแล้ว
+            }
             
-            console.log('✅ Metadata updated successfully');
             console.log(`🎉 Order creation completed: ${order._id} for user: ${userName}`);
             return order;
           } else {
             console.error('❌ Order creation returned null');
+            console.error('❌ Cart data used:', parsedCartData);
           }
         } catch (parseError) {
           console.error('❌ Error parsing cart data:', parseError);
           console.error('❌ Raw cart data:', cartData);
+          console.error('❌ Parse error stack:', parseError.stack);
         }
       } else {
         console.error('❌ Missing cart data or userName in payment intent metadata');
@@ -266,6 +286,11 @@ class PaymentService {
     } catch (error) {
       console.error('❌ Handle successful payment error:', error);
       console.error('❌ Error stack:', error.stack);
+      console.error('❌ Payment intent that caused error:', {
+        id: paymentIntent.id,
+        status: paymentIntent.status,
+        metadata: paymentIntent.metadata
+      });
     }
   }
 
@@ -381,6 +406,13 @@ class PaymentService {
     try {
       const { cartItems, userName, totalAmount } = cartData;
       
+      console.log('🏗️ Starting order creation with:', {
+        cartItemsCount: cartItems?.length,
+        userName: userName,
+        totalAmount: totalAmount,
+        paymentIntentId: paymentIntentId
+      });
+      
       // ✅ ตรวจสอบข้อมูลที่จำเป็น
       if (!cartItems || cartItems.length === 0) {
         throw new Error('Cart is empty');
@@ -394,10 +426,11 @@ class PaymentService {
         throw new Error('Invalid total amount');
       }
 
-      console.log(`Creating order for user: ${userName}, items: ${cartItems.length}, total: ${totalAmount}`);
+      console.log(`✅ Validation passed. Creating order for user: ${userName}, items: ${cartItems.length}, total: ${totalAmount}`);
 
       // ตรวจสอบว่าสินค้าในสต็อกเพียงพอหรือไม่
       for (const item of cartItems) {
+        console.log(`🔍 Checking stock for product: ${item.productName || item.name}`);
         const product = await ProductModel.findById(item.productId);
         if (!product) {
           throw new Error(`Product ${item.productName || item.name} not found`);
@@ -408,10 +441,14 @@ class PaymentService {
           requiredQuantity *= product.packSize;
         }
 
+        console.log(`📦 Stock check: ${item.productName} - Required: ${requiredQuantity}, Available: ${product.totalQuantity}`);
+
         if (product.totalQuantity < requiredQuantity) {
           throw new Error(`Not enough stock for ${item.productName || item.name}. Available: ${product.totalQuantity}, Required: ${requiredQuantity}`);
         }
       }
+
+      console.log('✅ Stock validation passed for all products');
 
       // คำนวณราคาทั้งหมดและโปรโมชั่น
       let subtotal = 0;
@@ -420,6 +457,7 @@ class PaymentService {
       const appliedPromotions = [];
       
       for (const item of cartItems) {
+        console.log(`💰 Processing pricing for: ${item.productName || item.name}`);
         const currentProduct = await ProductModel.findById(item.productId);
         if (!currentProduct) {
           throw new Error(`Product ${item.productName || item.name} not found`);
@@ -454,6 +492,7 @@ class PaymentService {
               originalPrice: item.price,
               discountAmount: itemDiscount
             });
+            console.log(`🎉 Applied promotion: ${promoById.promotionName} - Discount: ${itemDiscount}`);
           }
         }
 
@@ -470,12 +509,15 @@ class PaymentService {
           discountAmount: itemDiscount,
           packSize: currentProduct.packSize
         });
+        
+        console.log(`✅ Product processed: ${item.productName} - Qty: ${item.quantity}, Price: ${finalPrice}, Total: ${finalPrice * item.quantity}`);
       }
 
       const total = subtotal;
+      console.log(`💰 Pricing completed - Subtotal: ${subtotal}, Total: ${total}, Discount: ${totalDiscount}`);
 
       // ✅ สร้าง Order ใหม่ด้วย paymentMethod เป็น "BankTransfer"
-      const order = new OrderModel({
+      const orderData = {
         userName: userName,
         products,
         subtotal,
@@ -491,18 +533,29 @@ class PaymentService {
           paymentStatus: 'succeeded', // ✅ แก้ไขให้ตรงกับ Stripe
           paidAt: new Date()
         }
+      };
+      
+      console.log('📝 Creating order with data:', {
+        userName: orderData.userName,
+        productCount: orderData.products.length,
+        total: orderData.total,
+        orderStatus: orderData.orderStatus,
+        paymentStatus: orderData.stripePayment.paymentStatus
       });
+
+      const order = new OrderModel(orderData);
 
       // ✅ บันทึก Order ก่อน
       const savedOrder = await order.save();
-      console.log(`Order created successfully: ${savedOrder._id}`);
+      console.log(`✅ Order created successfully: ${savedOrder._id}`);
 
       // ✅ ตัดสต็อกสินค้าหลังจากสร้าง Order สำเร็จ
       try {
+        console.log('📦 Starting stock reduction...');
         await this.processStockReduction(savedOrder);
-        console.log(`Stock reduction completed for order: ${savedOrder._id}`);
+        console.log(`✅ Stock reduction completed for order: ${savedOrder._id}`);
       } catch (stockError) {
-        console.error(`Stock reduction failed for order: ${savedOrder._id}:`, stockError);
+        console.error(`❌ Stock reduction failed for order: ${savedOrder._id}:`, stockError);
         // ✅ อัปเดตสถานะ Order เป็น error
         await OrderModel.findByIdAndUpdate(savedOrder._id, {
           $set: {
@@ -516,17 +569,20 @@ class PaymentService {
 
       // ✅ เคลียร์ตะกร้าหลังจากสร้าง order และตัดสต็อกสำเร็จ
       try {
+        console.log(`🛒 Clearing cart for user: ${userName}`);
         await CartModel.deleteMany({ userName: userName });
-        console.log(`Cart cleared for user: ${userName}`);
+        console.log(`✅ Cart cleared for user: ${userName}`);
       } catch (cartError) {
-        console.error(`Failed to clear cart for user: ${userName}:`, cartError);
+        console.error(`⚠️ Failed to clear cart for user: ${userName}:`, cartError);
         // ไม่ throw error เพราะ Order ถูกสร้างแล้ว
       }
 
-      console.log(`Order creation completed successfully: ${savedOrder._id} for user: ${userName}`);
+      console.log(`🎉 Order creation completed successfully: ${savedOrder._id} for user: ${userName}`);
       return savedOrder;
     } catch (error) {
-      console.error('Create order from cart data error:', error);
+      console.error('❌ Create order from cart data error:', error);
+      console.error('🔍 Error stack:', error.stack);
+      console.error('📝 Cart data that caused error:', cartData);
       throw error;
     }
   }
