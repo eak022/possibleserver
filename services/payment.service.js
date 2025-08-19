@@ -463,12 +463,20 @@ class PaymentService {
 
       console.log(`✅ Validation passed. Creating order for user: ${userName}, items: ${cartItems.length}, total: ${totalAmount}`);
 
-      // ตรวจสอบว่าสินค้าในสต็อกเพียงพอหรือไม่
+      // ✅ ตรวจสอบว่าสินค้าในสต็อกเพียงพอหรือไม่ - แก้ไขให้ใช้ _id แทน productId
       for (const item of cartItems) {
         console.log(`🔍 Checking stock for product: ${item.productName || item.name}`);
-        const product = await ProductModel.findById(item.productId);
+        console.log(`🔍 Product ID from cart: ${item._id || item.productId}`);
+        
+        // ✅ ใช้ _id เป็นหลัก เพราะนี่คือ productId ที่ถูกต้อง
+        const productId = item._id || item.productId;
+        if (!productId) {
+          throw new Error(`Product ID not found for ${item.productName || item.name}`);
+        }
+        
+        const product = await ProductModel.findById(productId);
         if (!product) {
-          throw new Error(`Product ${item.productName || item.name} not found`);
+          throw new Error(`Product with ID ${productId} (${item.productName || item.name}) not found in database`);
         }
 
         let requiredQuantity = item.quantity;
@@ -476,7 +484,7 @@ class PaymentService {
           requiredQuantity *= product.packSize;
         }
 
-        console.log(`📦 Stock check: ${item.productName} - Required: ${requiredQuantity}, Available: ${product.totalQuantity}`);
+        console.log(`📦 Stock check: ${item.productName} (ID: ${productId}) - Required: ${requiredQuantity}, Available: ${product.totalQuantity}`);
 
         if (product.totalQuantity < requiredQuantity) {
           throw new Error(`Not enough stock for ${item.productName || item.name}. Available: ${product.totalQuantity}, Required: ${requiredQuantity}`);
@@ -484,6 +492,14 @@ class PaymentService {
       }
 
       console.log('✅ Stock validation passed for all products');
+
+      // ✅ เพิ่มการ debug ข้อมูล cartItems
+      console.log('🔍 Cart items structure:', cartItems.map(item => ({
+        _id: item._id,
+        productId: item.productId,
+        productName: item.productName || item.name,
+        quantity: item.quantity
+      })));
 
       // คำนวณราคาทั้งหมดและโปรโมชั่น
       let subtotal = 0;
@@ -493,9 +509,16 @@ class PaymentService {
       
       for (const item of cartItems) {
         console.log(`💰 Processing pricing for: ${item.productName || item.name}`);
-        const currentProduct = await ProductModel.findById(item.productId);
+        
+        // ✅ ใช้ _id เป็นหลัก เพราะนี่คือ productId ที่ถูกต้อง
+        const productId = item._id || item.productId;
+        if (!productId) {
+          throw new Error(`Product ID not found for ${item.productName || item.name}`);
+        }
+        
+        const currentProduct = await ProductModel.findById(productId);
         if (!currentProduct) {
-          throw new Error(`Product ${item.productName || item.name} not found`);
+          throw new Error(`Product with ID ${productId} (${item.productName || item.name}) not found in database`);
         }
 
         let requiredQuantity = item.quantity;
@@ -515,7 +538,7 @@ class PaymentService {
         let promoDocForLine = null;
         if (item.promotionId) {
           const promoById = await PromotionModel.findById(item.promotionId);
-          if (promoById && promoById.productId?.toString() === item.productId.toString() && new Date(promoById.validityStart) <= nowDate && nowDate <= new Date(promoById.validityEnd)) {
+          if (promoById && promoById.productId?.toString() === productId.toString() && new Date(promoById.validityStart) <= nowDate && nowDate <= new Date(promoById.validityEnd)) {
             promoDocForLine = promoById;
             finalPrice = promoById.discountedPrice;
             itemDiscount = (item.price - promoById.discountedPrice) * item.quantity;
@@ -533,7 +556,7 @@ class PaymentService {
 
         subtotal += finalPrice * item.quantity;
         products.push({
-          productId: item.productId,
+          productId: productId, // ✅ ใช้ productId ที่ถูกต้อง
           image: item.image,
           productName: currentProduct.productName,
           quantity: item.quantity,
