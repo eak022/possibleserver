@@ -90,6 +90,15 @@ class PaymentService {
           ? (currentProduct.averagePurchasePrice || 0) * currentProduct.packSize
           : (currentProduct.averagePurchasePrice || 0);
 
+        // ✅ Debug: ตรวจสอบข้อมูลที่ส่งมา
+        console.log('Processing cart item:', {
+          itemId: item._id,
+          itemName: item.name,
+          itemProductName: item.productName,
+          currentProductName: currentProduct.productName,
+          finalName: item.name || item.productName || currentProduct.productName
+        });
+
         // ตีความโปรโมชันจากบรรทัดในตะกร้า
         const nowDate = new Date();
         let finalPrice = item.price;
@@ -116,7 +125,7 @@ class PaymentService {
         products.push({
           productId: item.productId,
           image: item.image,
-          productName: item.name,
+          productName: currentProduct.productName, // ใช้ชื่อจาก Product Model เป็นหลัก
           quantity: item.quantity,
           purchasePrice: purchasePrice,
           sellingPricePerUnit: finalPrice,
@@ -166,6 +175,19 @@ class PaymentService {
       }
 
       const total = subtotal;
+
+      // ✅ ตรวจสอบข้อมูลก่อนสร้าง Order
+      console.log('Order data validation:', {
+        userName: orderData.userName,
+        productsCount: products.length,
+        subtotal,
+        total,
+        firstProduct: products[0] ? {
+          productId: products[0].productId,
+          productName: products[0].productName,
+          image: products[0].image
+        } : null
+      });
 
       // สร้าง Order ใหม่ด้วย paymentMethod เป็น "BankTransfer"
       const order = new OrderModel({
