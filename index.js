@@ -46,7 +46,24 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 // Stripe webhook must receive the raw body. Define it BEFORE JSON body parser.
-app.post('/api/v1/stripe/webhook', express.raw({ type: 'application/json' }), stripeController.handleWebhook);
+app.post('/api/v1/stripe/webhook', 
+  express.raw({ type: 'application/json' }), 
+  (req, res, next) => {
+    // Log webhook request for debugging
+    console.log('Webhook received:', {
+      method: req.method,
+      url: req.url,
+      headers: {
+        'stripe-signature': req.headers['stripe-signature'] ? 'present' : 'missing',
+        'content-type': req.headers['content-type'],
+        'content-length': req.headers['content-length']
+      },
+      bodyLength: req.body ? req.body.length : 0
+    });
+    next();
+  },
+  stripeController.handleWebhook
+);
 
 // JSON parsers for the rest of the routes
 app.use(express.json());

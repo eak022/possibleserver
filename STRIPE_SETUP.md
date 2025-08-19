@@ -145,3 +145,4 @@ Stripe-Signature: <stripe_signature>
 หากมีปัญหาหรือคำถาม สามารถติดต่อได้ที่:
 - Email: support@yourcompany.com
 - GitHub Issues: [Repository Issues](https://github.com/your-repo/issues)
+
