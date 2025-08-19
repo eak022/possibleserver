@@ -210,33 +210,30 @@ class PaymentService {
       }
       
       // ✅ สร้าง Order ใหม่เมื่อชำระเงินสำเร็จเท่านั้น
-      const cartData = paymentIntent.metadata?.cartData;
       const userName = paymentIntent.metadata?.userName;
+      const cartItemsCount = paymentIntent.metadata?.cartItems;
+      const totalAmount = paymentIntent.metadata?.totalAmount;
       
       console.log('🔍 Extracted metadata:', {
-        hasCartData: !!cartData,
         hasUserName: !!userName,
         userName: userName,
-        cartDataLength: cartData ? cartData.length : 0
+        cartItemsCount: cartItemsCount,
+        totalAmount: totalAmount
       });
       
-      if (cartData && userName) {
+      if (userName && cartItemsCount && totalAmount) {
         try {
-          console.log('📝 Parsing cart data...');
-          const parsedCartData = JSON.parse(cartData);
-          console.log('✅ Cart data parsed successfully:', {
-            itemCount: parsedCartData.cartItems?.length,
-            totalAmount: parsedCartData.totalAmount,
-            userName: parsedCartData.userName,
-            cartItems: parsedCartData.cartItems?.map(item => ({
-              productName: item.productName,
-              quantity: item.quantity,
-              price: item.price
-            }))
-          });
+          console.log('📝 Creating order from payment intent metadata...');
           
-          console.log('🏗️ Creating order from cart data...');
-          const order = await this.createOrderFromCartData(parsedCartData, paymentIntent.id);
+          // ✅ สร้างข้อมูลตะกร้าจากข้อมูลที่มีอยู่
+          const orderData = {
+            userName: userName,
+            cartItems: [], // จะต้องดึงจากฐานข้อมูล
+            totalAmount: parseFloat(totalAmount)
+          };
+          
+          console.log('🏗️ Creating order from metadata...');
+          const order = await this.createOrderFromUserData(orderData, paymentIntent.id);
           
           if (order) {
             console.log('✅ Order created successfully:', order._id);
@@ -276,10 +273,11 @@ class PaymentService {
           console.error('❌ Parse error stack:', parseError.stack);
         }
       } else {
-        console.error('❌ Missing cart data or userName in payment intent metadata');
+        console.error('❌ Missing required metadata for order creation');
         console.error('❌ Metadata breakdown:', {
-          cartData: cartData,
           userName: userName,
+          cartItemsCount: cartItemsCount,
+          totalAmount: totalAmount,
           fullMetadata: paymentIntent.metadata
         });
       }
@@ -641,6 +639,65 @@ class PaymentService {
       console.error('❌ Create order from cart data error:', error);
       console.error('🔍 Error stack:', error.stack);
       console.error('📝 Cart data that caused error:', cartData);
+      throw error;
+    }
+  }
+
+  // ✅ เพิ่มฟังก์ชันสร้าง Order จากข้อมูล user และดึงข้อมูลตะกร้าจากฐานข้อมูล
+  static async createOrderFromUserData(orderData, paymentIntentId) {
+    try {
+      const { userName, totalAmount } = orderData;
+      
+      console.log('🏗️ Starting order creation from user data:', {
+        userName: userName,
+        totalAmount: totalAmount,
+        paymentIntentId: paymentIntentId
+      });
+      
+      // ✅ ตรวจสอบข้อมูลที่จำเป็น
+      if (!userName || userName === 'Guest') {
+        throw new Error('Invalid username');
+      }
+      
+      if (!totalAmount || totalAmount <= 0) {
+        throw new Error('Invalid total amount');
+      }
+
+      console.log(`✅ Validation passed. Creating order for user: ${userName}, total: ${totalAmount}`);
+
+      // ✅ ดึงข้อมูลตะกร้าจากฐานข้อมูล
+      const cartItems = await CartModel.find({ userName: userName });
+      if (!cartItems || cartItems.length === 0) {
+        throw new Error('Cart is empty or not found');
+      }
+
+      console.log(`✅ Found ${cartItems.length} items in cart for user: ${userName}`);
+
+      // ✅ แปลงข้อมูลตะกร้าให้ตรงกับ format ที่ต้องการ
+      const formattedCartItems = cartItems.map(item => ({
+        _id: item.productId, // ใช้ productId จาก cart
+        productId: item.productId,
+        productName: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        pack: item.pack || false,
+        packSize: item.packSize || 1,
+        image: item.image,
+        barcode: item.barcode,
+        promotionId: item.promotionId
+      }));
+
+      // ✅ สร้าง Order จากข้อมูลตะกร้าที่ดึงมา
+      const order = await this.createOrderFromCartData({
+        cartItems: formattedCartItems,
+        userName: userName,
+        totalAmount: totalAmount
+      }, paymentIntentId);
+
+      return order;
+    } catch (error) {
+      console.error('❌ Create order from user data error:', error);
+      console.error('🔍 Error stack:', error.stack);
       throw error;
     }
   }

@@ -54,15 +54,14 @@ const createPaymentIntent = async (req, res) => {
         currency: currency,
         payment_method_types: ['promptpay'], // เฉพาะ PromptPay เท่านั้น
         metadata: {
-          // ❌ ไม่ใส่ orderId ตอนแรก - จะอัปเดตหลังจากสร้าง Order สำเร็จ
-          // orderId: orderId || 'unknown',
+          // ✅ ส่งเฉพาะข้อมูลที่จำเป็นและกระชับ เพื่อไม่ให้เกิน 500 ตัวอักษร
           description: description || 'การชำระเงิน',
           amount: amount.toString(),
           currency: currency,
-          createdAt: new Date().toISOString(),
-          // ✅ เพิ่มข้อมูลที่จำเป็นสำหรับการสร้าง Order
-          cartData: orderData ? JSON.stringify(orderData) : null,
-          userName: orderData?.userName || 'Guest'
+          userName: orderData?.userName || 'Guest',
+          // ✅ ส่งข้อมูลตะกร้าแบบกระชับ
+          cartItems: orderData?.cartItems?.length || 0,
+          totalAmount: orderData?.total || amount
         }
         // ลบ payment_method_options ออกเพราะไม่รองรับใน PromptPay
       });
