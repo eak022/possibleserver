@@ -152,33 +152,29 @@ const createPaymentIntent = async (req, res) => {
       hosted: qrAction.hosted_instructions_url
     });
 
-    // ถ้ามี orderData ให้สร้าง Order ใหม่
+    // ไม่สร้าง order ตอนนี้ - รอให้ชำระเงินสำเร็จก่อน
     let order = null;
     let finalOrderId = orderId;
     
-    if (orderData) {
-      // สร้าง order ก่อนเพื่อให้ได้ orderId จริง
-      order = await PaymentService.createOrderWithStripePayment(
-        orderData,
-        confirmed.id, // ใช้ confirmed.id แทน paymentIntent.id
-        qrCodeUrl
-      );
-      
-      // ใช้ orderId จริงที่ได้จากการสร้าง order
-      finalOrderId = order._id.toString();
-      
-      // อัปเดต metadata ของ PaymentIntent ด้วย orderId จริง
-      try {
-        await stripe.paymentIntents.update(confirmed.id, {
-          metadata: {
-            ...paymentIntent.metadata,
-            orderId: finalOrderId
-          }
-        });
-        console.log('Updated PaymentIntent metadata with real orderId:', finalOrderId);
-      } catch (updateError) {
-        console.error('Failed to update PaymentIntent metadata:', updateError);
-      }
+    // เก็บข้อมูลตะกร้าใน metadata เพื่อใช้สร้าง order ภายหลัง
+    const cartData = {
+      cartItems: req.body.cartItems || [],
+      userName: req.body.userName || 'Guest',
+      totalAmount: amount
+    };
+    
+    // อัปเดต metadata ของ PaymentIntent ด้วยข้อมูลตะกร้า
+    try {
+      await stripe.paymentIntents.update(confirmed.id, {
+        metadata: {
+          ...paymentIntent.metadata,
+          cartData: JSON.stringify(cartData),
+          userName: req.body.userName || 'Guest'
+        }
+      });
+      console.log('Updated PaymentIntent metadata with cart data for user:', req.body.userName);
+    } catch (updateError) {
+      console.error('Failed to update PaymentIntent metadata:', updateError);
     }
 
     res.status(200).json({
@@ -189,8 +185,7 @@ const createPaymentIntent = async (req, res) => {
         promptPayUrl: promptPayUrl, // URL สำหรับ PromptPay app
         amount: amount,
         currency: currency,
-        status: confirmed.status,
-        order: order
+        status: confirmed.status
       },
       message: 'สร้างการชำระเงินสำเร็จ'
     });
@@ -406,6 +401,12 @@ const handleWebhook = async (req, res) => {
       process.env.STRIPE_WEBHOOK_SECRET
     );
     console.log('Webhook signature verified successfully for event:', event.type);
+    console.log('Event data:', {
+      id: event.id,
+      type: event.type,
+      object: event.data?.object?.id,
+      status: event.data?.object?.status
+    });
   } catch (err) {
     console.error('Webhook signature verification failed:', err.message);
     console.error('Error details:', {
@@ -423,14 +424,28 @@ const handleWebhook = async (req, res) => {
   }
 
   try {
+    console.log('🔄 Processing webhook event:', {
+      type: event.type,
+      id: event.id,
+      objectId: event.data?.object?.id,
+      objectType: event.data?.object?.object,
+      timestamp: new Date().toISOString()
+    });
+
     switch (event.type) {
       case 'payment_intent.succeeded':
         console.log('Processing payment_intent.succeeded event');
+        // ✅ เพิ่มการตรวจสอบว่า event นี้ถูกประมวลผลแล้วหรือไม่
+        if (event.data?.object?.metadata?.processed === 'true') {
+          console.log('Payment intent already processed, skipping webhook:', event.data.object.id);
+          break;
+        }
         await handlePaymentSuccess(event.data.object);
         break;
       
       case 'payment_intent.payment_failed':
         console.log('Processing payment_intent.payment_failed event');
+        // ✅ เพิ่มการจัดการ payment_intent.payment_failed
         await handlePaymentFailure(event.data.object);
         break;
       
@@ -441,31 +456,67 @@ const handleWebhook = async (req, res) => {
       
       case 'payment_intent.created':
         console.log('Processing payment_intent.created event');
-        await handlePaymentIntentCreated(event.data.object);
+        // ❌ ไม่ต้องทำอะไรกับ payment_intent.created เพราะไม่ต้องการสร้าง Order ตอนนี้
+        console.log('Payment intent created - no action needed');
         break;
       
       case 'checkout.session.completed':
         console.log('Processing checkout.session.completed event');
-        await handleCheckoutSessionCompleted(event.data.object);
+        // ❌ ไม่ต้องทำอะไรกับ checkout.session.completed เพราะใช้ PromptPay
+        console.log('Checkout session completed - no action needed for PromptPay');
         break;
       
       case 'checkout.session.expired':
         console.log('Processing checkout.session.expired event');
-        await handleCheckoutSessionExpired(event.data.object);
+        // ❌ ไม่ต้องทำอะไรกับ checkout.session.expired เพราะใช้ PromptPay
+        console.log('Checkout session expired - no action needed for PromptPay');
         break;
       
       case 'charge.succeeded':
-        console.log('Processing charge.succeeded event');
+        console.log('Processing charge.succeeded event for PromptPay');
         await handleChargeSucceeded(event.data.object);
         break;
       
       case 'charge.updated':
         console.log('Processing charge.updated event');
-        await handleChargeUpdated(event.data.object);
+        // ❌ ไม่ต้องทำอะไรกับ charge.updated เพราะไม่เกี่ยวข้องกับ PromptPay
+        console.log('Charge updated - no action needed for PromptPay');
+        break;
+      
+      // ✅ เพิ่มการจัดการ charge.succeeded สำหรับ PromptPay
+      case 'charge.succeeded':
+        console.log('Processing charge.succeeded event for PromptPay');
+        await handleChargeSucceeded(event.data.object);
+        break;
+      
+      // ✅ เพิ่มการจัดการ charge.failed สำหรับ PromptPay
+      case 'charge.failed':
+        console.log('Processing charge.failed event for PromptPay');
+        await handleChargeFailed(event.data.object);
+        break;
+      
+      // เพิ่ม event types ที่อาจเกิดขึ้นกับ PromptPay
+      case 'payment_intent.processing':
+        console.log('Processing payment_intent.processing event');
+        // PromptPay อาจส่ง event นี้ก่อน succeeded - ไม่ต้องทำอะไร
+        console.log('Payment intent processing - no action needed');
+        break;
+      
+      case 'payment_intent.requires_action':
+        console.log('Processing payment_intent.requires_action event');
+        // PromptPay อาจส่ง event นี้เมื่อต้องการ action - ไม่ต้องทำอะไร
+        console.log('Payment intent requires action - no action needed');
         break;
       
       default:
         console.log(`Unhandled event type: ${event.type}`);
+        // Log ข้อมูลเพิ่มเติมสำหรับ event ที่ไม่รู้จัก
+        console.log('Unknown event data:', {
+          eventType: event.type,
+          eventId: event.id,
+          objectId: event.data?.object?.id,
+          objectType: event.data?.object?.object
+        });
     }
 
     // เพิ่ม event.id เข้า Set หลังจากประมวลผลสำเร็จ
@@ -481,27 +532,73 @@ const handleWebhook = async (req, res) => {
 // จัดการการชำระเงินสำเร็จ
 const handlePaymentSuccess = async (paymentIntent) => {
   try {
-    console.log('Payment succeeded:', paymentIntent.id);
+    console.log('🎉 Payment succeeded - starting processing:', {
+      paymentIntentId: paymentIntent.id,
+      status: paymentIntent.status,
+      amount: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      timestamp: new Date().toISOString()
+    });
+    console.log('📋 Payment intent details:', {
+      id: paymentIntent.id,
+      status: paymentIntent.status,
+      amount: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      metadata: paymentIntent.metadata,
+      payment_method_types: paymentIntent.payment_method_types
+    });
     
     // ตรวจสอบว่า payment intent นี้ยังไม่ถูกประมวลผล
     if (paymentIntent.status === 'succeeded') {
-      await PaymentService.handleSuccessfulPayment(paymentIntent);
-      console.log('Payment success processed successfully for:', paymentIntent.id);
+      console.log('✅ Processing successful payment for PromptPay...');
+      console.log('🔄 Calling PaymentService.handleSuccessfulPayment...');
+      
+      const result = await PaymentService.handleSuccessfulPayment(paymentIntent);
+      
+      console.log('✅ Payment success processed successfully for:', {
+        paymentIntentId: paymentIntent.id,
+        result: result ? 'Order created' : 'No result',
+        timestamp: new Date().toISOString()
+      });
     } else {
-      console.log('Payment intent not succeeded, skipping:', paymentIntent.status);
+      console.log('❌ Payment intent not succeeded, skipping:', {
+        paymentIntentId: paymentIntent.id,
+        status: paymentIntent.status,
+        timestamp: new Date().toISOString()
+      });
+      // สำหรับ PromptPay อาจต้องรอ event อื่น
+      if (paymentIntent.status === 'processing') {
+        console.log('⏳ Payment is processing, may need to wait for final status');
+      }
     }
   } catch (error) {
-    console.error('Handle payment success error:', error);
+    console.error('❌ Handle payment success error:', {
+      error: error.message,
+      paymentIntentId: paymentIntent.id,
+      timestamp: new Date().toISOString()
+    });
   }
 };
 
 // จัดการการชำระเงินล้มเหลว
 const handlePaymentFailure = async (paymentIntent) => {
   try {
-    console.log('Payment failed:', paymentIntent.id);
+    console.log('🔄 Payment failed:', {
+      paymentIntentId: paymentIntent.id,
+      status: paymentIntent.status,
+      timestamp: new Date().toISOString()
+    });
+    
+    // ✅ เรียก PaymentService เพื่อจัดการการชำระเงินล้มเหลว
     await PaymentService.handleFailedPayment(paymentIntent);
+    
+    console.log('✅ Payment failure handled successfully for:', paymentIntent.id);
   } catch (error) {
-    console.error('Handle payment failure error:', error);
+    console.error('❌ Handle payment failure error:', {
+      error: error.message,
+      paymentIntentId: paymentIntent.id,
+      timestamp: new Date().toISOString()
+    });
   }
 };
 
@@ -515,80 +612,87 @@ const handlePaymentCancel = async (paymentIntent) => {
   }
 };
 
-// จัดการ checkout session completed
-const handleCheckoutSessionCompleted = async (session) => {
+// ✅ เพิ่มการจัดการ charge.failed สำหรับ PromptPay
+const handleChargeFailed = async (charge) => {
   try {
-    console.log('Checkout session completed:', session.id);
-    if (session.payment_intent) {
-      const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent);
-      await PaymentService.handleSuccessfulPayment(paymentIntent);
-    }
-  } catch (error) {
-    console.error('Handle checkout session completed error:', error);
-  }
-};
-
-// จัดการ checkout session expired
-const handleCheckoutSessionExpired = async (session) => {
-  try {
-    console.log('Checkout session expired:', session.id);
-    // สามารถเพิ่มการจัดการ session ที่หมดอายุได้ที่นี่
-  } catch (error) {
-    console.error('Handle checkout session expired error:', error);
-  }
-};
-
-// จัดการ payment intent created
-const handlePaymentIntentCreated = async (paymentIntent) => {
-  try {
-    console.log('Payment intent created:', paymentIntent.id);
-    // สามารถเพิ่มการจัดการ payment intent ที่สร้างใหม่ได้ที่นี่
-  } catch (error) {
-    console.error('Handle payment intent created error:', error);
-  }
-};
-
-// จัดการ charge succeeded
-const handleChargeSucceeded = async (charge) => {
-  try {
-    console.log('Charge succeeded:', charge.id);
+    console.log('Charge failed for PromptPay:', charge.id);
+    console.log('Charge details:', {
+      id: charge.id,
+      paymentIntentId: charge.payment_intent,
+      status: charge.status,
+      amount: charge.amount,
+      failureReason: charge.failure_reason || 'Unknown'
+    });
     
-    // ตรวจสอบว่า charge นี้เกี่ยวข้องกับ payment intent หรือไม่
+    // ถ้ามี payment_intent ให้จัดการการชำระเงินล้มเหลว
     if (charge.payment_intent) {
       try {
         const paymentIntent = await stripe.paymentIntents.retrieve(charge.payment_intent);
-        console.log('Payment intent found for charge:', paymentIntent.id, 'Status:', paymentIntent.status);
+        console.log('Payment intent found for failed charge:', paymentIntent.id);
         
-        // ตรวจสอบว่า payment intent นี้ยังไม่ถูกประมวลผล
-        if (paymentIntent.status === 'succeeded') {
-          await PaymentService.handleSuccessfulPayment(paymentIntent);
-        } else {
-          console.log('Payment intent not yet succeeded, skipping:', paymentIntent.status);
-        }
+        // เรียก PaymentService เพื่อจัดการการชำระเงินล้มเหลว
+        await PaymentService.handleFailedPayment(paymentIntent);
+        
       } catch (retrieveError) {
-        if (retrieveError.code === 'resource_missing') {
-          console.log('Payment intent not found for charge, may have been deleted:', charge.payment_intent);
-        } else {
-          console.error('Error retrieving payment intent:', retrieveError.message);
-        }
+        console.error('Error retrieving payment intent for failed charge:', retrieveError.message);
       }
     } else {
       console.log('Charge has no associated payment intent');
+    }
+  } catch (error) {
+    console.error('Handle charge failed error:', error);
+  }
+};
+
+// ✅ เพิ่มการจัดการ charge.succeeded สำหรับ PromptPay
+const handleChargeSucceeded = async (charge) => {
+  try {
+    console.log('Charge succeeded for PromptPay:', charge.id);
+    console.log('Charge details:', {
+      id: charge.id,
+      paymentIntentId: charge.payment_intent,
+      status: charge.status,
+      amount: charge.amount,
+      currency: charge.currency
+    });
+
+    // ตรวจสอบว่า charge นี้ยังไม่ถูกประมวลผล
+    if (charge.status === 'succeeded' && charge.payment_intent) {
+      console.log('Processing successful charge for PromptPay...');
+      
+      try {
+        // ดึง Payment Intent จาก charge
+        const paymentIntent = await stripe.paymentIntents.retrieve(charge.payment_intent);
+        console.log('Payment intent retrieved for charge:', paymentIntent.id);
+        
+        // ตรวจสอบว่า payment intent นี้ยังไม่ถูกประมวลผล
+        if (paymentIntent.metadata && paymentIntent.metadata.processed === 'true') {
+          console.log('Payment intent already processed, skipping:', paymentIntent.id);
+          return;
+        }
+        
+        // เรียก PaymentService เพื่อสร้าง Order
+        await PaymentService.handleSuccessfulPayment(paymentIntent);
+        console.log('Charge success processed successfully for:', charge.id);
+        
+      } catch (retrieveError) {
+        console.error('Error retrieving payment intent for charge:', retrieveError.message);
+        
+        // ถ้าไม่สามารถดึง payment intent ได้ ให้ใช้ charge เป็นตัวแทน
+        if (retrieveError.code === 'resource_missing') {
+          console.log('Payment intent not found, may have been deleted');
+        }
+      }
+    } else {
+      console.log('Charge not succeeded or missing payment_intent, skipping:', charge.status);
     }
   } catch (error) {
     console.error('Handle charge succeeded error:', error);
   }
 };
 
-// จัดการ charge updated
-const handleChargeUpdated = async (charge) => {
-  try {
-    console.log('Charge updated:', charge.id);
-    // สามารถเพิ่มการจัดการ charge ที่อัปเดตได้ที่นี่
-  } catch (error) {
-    console.error('Handle charge updated error:', error);
-  }
-};
+// ❌ ลบฟังก์ชันที่ไม่จำเป็นออกเพราะใช้ PromptPay เท่านั้น
+// ไม่ต้องจัดการ checkout session หรือ charge events
 
 module.exports = {
   createPaymentIntent,
