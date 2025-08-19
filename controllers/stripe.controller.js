@@ -382,6 +382,11 @@ const processedEventIds = new Set();
 
 // Webhook สำหรับรับการอัปเดตจาก Stripe
 const handleWebhook = async (req, res) => {
+  console.log('🚀 Webhook handler called!');
+  console.log('📝 Request method:', req.method);
+  console.log('📝 Request URL:', req.url);
+  console.log('📝 Request headers:', req.headers);
+  
   const sig = req.headers['stripe-signature'];
   let event;
 
@@ -472,7 +477,9 @@ const handleWebhook = async (req, res) => {
           status: event.data.object.status,
           metadata: event.data.object.metadata
         });
+        console.log('🔍 Starting handlePaymentSuccess...');
         await handlePaymentSuccess(event.data.object);
+        console.log('✅ handlePaymentSuccess completed');
         break;
       
       case 'payment_intent.payment_failed':

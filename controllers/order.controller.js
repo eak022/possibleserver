@@ -586,52 +586,49 @@ exports.getSalesReportByLots = async (req, res) => {
   }
 };
 
-// ✅ ตรวจสอบ Order จาก Stripe Payment Intent
-exports.checkStripePaymentOrder = async (req, res) => {
+// ✅ ตรวจสอบ Order ที่สร้างจาก Stripe payment
+exports.checkStripePayment = async (req, res) => {
   try {
     const { paymentIntentId } = req.params;
-    
-    console.log('🔍 Checking order for Stripe payment intent:', paymentIntentId);
-    
+
     if (!paymentIntentId) {
       return res.status(400).json({
         success: false,
         message: 'ต้องระบุ Payment Intent ID'
       });
     }
-    
+
+    console.log('🔍 Checking order for Stripe payment:', paymentIntentId);
+
+    // หา Order ที่มี paymentIntentId นี้
     const order = await OrderModel.findOne({
       'stripePayment.paymentIntentId': paymentIntentId
     });
-    
-    console.log('🔍 Order search result:', {
-      paymentIntentId: paymentIntentId,
-      orderFound: !!order,
-      orderId: order?._id,
-      orderStatus: order?.orderStatus
-    });
-    
+
     if (order) {
+      console.log('✅ Order found:', order._id);
       res.status(200).json({
         success: true,
+        message: 'Order found',
         order: {
           _id: order._id,
-          orderStatus: order.orderStatus,
-          paymentMethod: order.paymentMethod,
+          userName: order.userName,
           total: order.total,
+          orderStatus: order.orderStatus,
           orderDate: order.orderDate,
           stripePayment: order.stripePayment
         }
       });
     } else {
+      console.log('⚠️ Order not found for payment intent:', paymentIntentId);
       res.status(200).json({
         success: false,
         message: 'Order not yet created',
-        paymentIntentId: paymentIntentId
+        order: null
       });
     }
   } catch (error) {
-    console.error('❌ Check stripe payment order error:', error);
+    console.error('❌ Check Stripe payment error:', error);
     res.status(500).json({
       success: false,
       message: 'เกิดข้อผิดพลาดในการตรวจสอบ Order',
