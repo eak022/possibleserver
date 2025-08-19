@@ -585,3 +585,57 @@ exports.getSalesReportByLots = async (req, res) => {
     res.status(500).json({ message: "Error generating sales report", error });
   }
 };
+
+// ✅ ตรวจสอบ Order จาก Stripe Payment Intent
+exports.checkStripePaymentOrder = async (req, res) => {
+  try {
+    const { paymentIntentId } = req.params;
+    
+    console.log('🔍 Checking order for Stripe payment intent:', paymentIntentId);
+    
+    if (!paymentIntentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ต้องระบุ Payment Intent ID'
+      });
+    }
+    
+    const order = await OrderModel.findOne({
+      'stripePayment.paymentIntentId': paymentIntentId
+    });
+    
+    console.log('🔍 Order search result:', {
+      paymentIntentId: paymentIntentId,
+      orderFound: !!order,
+      orderId: order?._id,
+      orderStatus: order?.orderStatus
+    });
+    
+    if (order) {
+      res.status(200).json({
+        success: true,
+        order: {
+          _id: order._id,
+          orderStatus: order.orderStatus,
+          paymentMethod: order.paymentMethod,
+          total: order.total,
+          orderDate: order.orderDate,
+          stripePayment: order.stripePayment
+        }
+      });
+    } else {
+      res.status(200).json({
+        success: false,
+        message: 'Order not yet created',
+        paymentIntentId: paymentIntentId
+      });
+    }
+  } catch (error) {
+    console.error('❌ Check stripe payment order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการตรวจสอบ Order',
+      error: error.message
+    });
+  }
+};

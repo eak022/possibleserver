@@ -54,16 +54,10 @@ app.options('*', cors(corsOptions));
 app.post('/api/v1/stripe/webhook', 
   express.raw({ type: 'application/json' }), 
   (req, res, next) => {
-    // ✅ เพิ่มการป้องกันการเรียก webhook ซ้ำซ้อน
-    const webhookId = req.headers['stripe-signature'] ? 
-      req.headers['stripe-signature'].substring(0, 20) : 'no-signature';
-    
     // Log webhook request for debugging
     console.log('Webhook received:', {
       method: req.method,
       url: req.url,
-      webhookId: webhookId,
-      timestamp: new Date().toISOString(),
       headers: {
         'stripe-signature': req.headers['stripe-signature'] ? 'present' : 'missing',
         'content-type': req.headers['content-type'],
