@@ -1,9 +1,8 @@
 const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
 const UserModel = require("../models/User");
+const TokenService = require("../services/token.service");
 const cloudinary = require("../utils/cloudinary");
 require("dotenv").config();
-const secret = process.env.SECRET;
 
 // Register
 exports.register = async (req, res) => {
@@ -19,7 +18,7 @@ exports.register = async (req, res) => {
       return res.status(409).json({ message: "Username is already taken" });
     }
 
-    const salt = await bcrypt.genSalt(10); // ใช้ async/await
+    const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
     const user = await UserModel.create({ username, password: hashedPassword });
@@ -47,35 +46,140 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { id: userDoc._id, username: userDoc.username },
-      secret,
-      { expiresIn: "24h" }
-    );
+    // สร้าง Access Token และ Refresh Token
+    const accessToken = TokenService.generateAccessToken(userDoc._id, userDoc.username);
+    const refreshToken = TokenService.generateRefreshToken(userDoc._id, userDoc.username);
 
-    // ส่ง Token ผ่าน HttpOnly Cookie
-    res.cookie("x-access-token", token, {
+    // บันทึก Refresh Token ในฐานข้อมูล
+    userDoc.refreshToken = refreshToken;
+    await userDoc.save();
+
+    // ส่ง Access Token ผ่าน HttpOnly Cookie (อายุสั้น)
+    res.cookie("x-access-token", accessToken, {
       httpOnly: true,
       secure: true,
       sameSite: "none",
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge: 15 * 60 * 1000, // 15 นาที
     });
 
-    return res.status(200).json({ message: "User logged in successfully" });
+    // ส่ง Refresh Token ผ่าน HttpOnly Cookie (อายุยาว)
+    res.cookie("x-refresh-token", refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 วัน
+    });
+
+    return res.status(200).json({ 
+      message: "User logged in successfully",
+      user: {
+        id: userDoc._id,
+        username: userDoc.username
+      }
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message || "Something went wrong while logging in" });
   }
 };
 
 // Logout
-exports.logout = (req, res) => {
-  res.clearCookie("x-access-token", {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-  });
-  return res.status(200).json({ message: "User logged out successfully" });
+exports.logout = async (req, res) => {
+  try {
+    const accessToken = req.cookies["x-access-token"];
+    const refreshToken = req.cookies["x-refresh-token"];
+    const userId = req.user?.id;
+
+    // เพิ่ม tokens เข้า blacklist
+    if (accessToken) {
+      await TokenService.blacklistToken(accessToken, userId);
+    }
+    if (refreshToken) {
+      await TokenService.blacklistToken(refreshToken, userId);
+    }
+
+    // ล้าง refresh token ในฐานข้อมูล
+    if (userId) {
+      await UserModel.findByIdAndUpdate(userId, {
+        refreshToken: null,
+        lastLogout: new Date()
+      });
+    }
+
+    // ล้าง cookies
+    res.clearCookie("x-access-token", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+    });
+    res.clearCookie("x-refresh-token", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+    });
+
+    return res.status(200).json({ message: "User logged out successfully" });
+  } catch (error) {
+    console.error("Logout error:", error);
+    // แม้จะเกิด error ก็ให้ล้าง cookies และ logout สำเร็จ
+    res.clearCookie("x-access-token", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+    });
+    res.clearCookie("x-refresh-token", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+    });
+    return res.status(200).json({ message: "User logged out successfully" });
+  }
+};
+
+// Refresh Token
+exports.refreshToken = async (req, res) => {
+  try {
+    const refreshToken = req.cookies["x-refresh-token"];
+    
+    if (!refreshToken) {
+      return res.status(401).json({ message: "Refresh token is missing" });
+    }
+
+    // ตรวจสอบ refresh token
+    const decoded = await TokenService.verifyRefreshToken(refreshToken);
+    
+    // ตรวจสอบว่า refresh token ในฐานข้อมูลตรงกันหรือไม่
+    const user = await UserModel.findById(decoded.id);
+    if (!user || user.refreshToken !== refreshToken) {
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
+
+    // สร้าง access token ใหม่
+    const newAccessToken = TokenService.generateAccessToken(user._id, user.username);
+
+    // ส่ง access token ใหม่
+    res.cookie("x-access-token", newAccessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: 15 * 60 * 1000, // 15 นาที
+    });
+
+    return res.status(200).json({ 
+      message: "Token refreshed successfully",
+      user: {
+        id: user._id,
+        username: user.username
+      }
+    });
+  } catch (error) {
+    if (error.message === "Token has been revoked") {
+      return res.status(401).json({ message: "Refresh token has been revoked. Please login again." });
+    } else if (error.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Refresh token has expired. Please login again." });
+    } else {
+      return res.status(403).json({ message: "Invalid refresh token" });
+    }
+  }
 };
 
 // Update Profile
