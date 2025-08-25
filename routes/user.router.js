@@ -4,6 +4,7 @@ const {
   register,
   login,
   logout,
+  refreshToken,
   updateProfile,
   checkAuth,
   updateProfileImage,
@@ -17,6 +18,7 @@ const { uploadUserImage } = require("../middlewares/upload");
 router.post("/register", register);
 router.post("/login", login);
 router.post("/logout", logout);
+router.post("/refresh-token", refreshToken);
 router.put("/updateProfile", authenticateToken, updateProfile);
 router.get("/check-auth", authenticateToken, checkAuth);
 router.patch("/profile-image", authenticateToken, uploadUserImage.single("profileImage"), updateProfileImage);

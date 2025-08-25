@@ -13,6 +13,10 @@ const API_URL = process.env.NODE_ENV === 'production' ? process.env.PROD_API_URL
 if (!process.env.DEFAULT_BILLING_EMAIL) {
   process.env.DEFAULT_BILLING_EMAIL = '654259022@webmail.npru.ac.th';
 }
+
+// Import CronService
+const CronService = require('./services/cron.service');
+
 const userRouter = require("./routes/user.router");
 const supplierRouter = require("./routes/supplier.router");
 const purchaseOrderRouter  = require("./routes/purchaseOrder.router");
@@ -32,6 +36,9 @@ const authenticateToken = require("./middlewares/authJwt.middleware");
 try {
   mongoose.connect(DB_URL);
   console.log("Connect to mongo DB Successfully");
+  
+  // เริ่มต้น Cron Jobs หลังจากเชื่อมต่อฐานข้อมูลสำเร็จ
+  CronService.init();
 } catch (error) {
   console.log("DB Connection Failed");
 }
