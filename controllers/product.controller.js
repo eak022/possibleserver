@@ -236,8 +236,10 @@ exports.updateProductData = async (req, res) => {
     const { id } = req.params;
     const updateData = { ...req.body };
 
-    // ตรวจสอบชื่อซ้ำ (ยกเว้นตัวเอง)
-    if (updateData.productName) {
+
+
+    // ตรวจสอบชื่อซ้ำ (ยกเว้นตัวเอง) - เฉพาะเมื่อมีการส่งชื่อใหม่และไม่ใช่ค่าว่าง
+    if (updateData.productName && updateData.productName.trim() !== '') {
       const nameExists = await ProductModel.findOne({ productName: updateData.productName, _id: { $ne: id } });
       if (nameExists) {
         return res.status(400).json({ message: "มีสินค้าชื่อนี้อยู่ในระบบแล้ว" });
@@ -249,13 +251,17 @@ exports.updateProductData = async (req, res) => {
     if (!currentProduct) {
       return res.status(404).json({ message: "ไม่พบสินค้า" });
     }
-    const nextBarcodePack = updateData.barcodePack !== undefined ? updateData.barcodePack : currentProduct.barcodePack;
-    const nextBarcodeUnit = updateData.barcodeUnit !== undefined ? updateData.barcodeUnit : currentProduct.barcodeUnit;
+    
+    // ตรวจสอบ barcode เฉพาะเมื่อมีการส่งค่าจริงๆ (ไม่ใช่ค่าว่าง)
+    const nextBarcodePack = (updateData.barcodePack !== undefined && updateData.barcodePack !== '') ? updateData.barcodePack : currentProduct.barcodePack;
+    const nextBarcodeUnit = (updateData.barcodeUnit !== undefined && updateData.barcodeUnit !== '') ? updateData.barcodeUnit : currentProduct.barcodeUnit;
+    
     if (nextBarcodePack && nextBarcodeUnit && nextBarcodePack === nextBarcodeUnit) {
       return res.status(400).json({ message: "บาร์โค้ดแพ็คและบาร์โค้ดชิ้นต้องไม่ซ้ำกันในสินค้าเดียวกัน" });
     }
-    // ตรวจสอบ barcodePack ซ้ำกับ barcodePack หรือ barcodeUnit ของสินค้าอื่น (ยกเว้นตัวเอง)
-    if (updateData.barcodePack) {
+    
+    // ตรวจสอบ barcodePack ซ้ำกับ barcodePack หรือ barcodeUnit ของสินค้าอื่น (ยกเว้นตัวเอง) - เฉพาะเมื่อมีการส่งค่าจริงๆ
+    if (updateData.barcodePack && updateData.barcodePack.trim() !== '') {
       const barcodePackExists = await ProductModel.findOne({
         $or: [
           { barcodePack: updateData.barcodePack },
@@ -267,8 +273,9 @@ exports.updateProductData = async (req, res) => {
         return res.status(400).json({ message: "Barcode แพ็คนี้ถูกใช้ไปแล้ว (อาจซ้ำกับ barcode แพ็คหรือ barcode หน่วยของสินค้าอื่น)" });
       }
     }
-    // ตรวจสอบ barcodeUnit ซ้ำกับ barcodePack หรือ barcodeUnit ของสินค้าอื่น (ยกเว้นตัวเอง)
-    if (updateData.barcodeUnit) {
+    
+    // ตรวจสอบ barcodeUnit ซ้ำกับ barcodePack หรือ barcodeUnit ของสินค้าอื่น (ยกเว้นตัวเอง) - เฉพาะเมื่อมีการส่งค่าจริงๆ
+    if (updateData.barcodeUnit && updateData.barcodeUnit.trim() !== '') {
       const barcodeUnitExists = await ProductModel.findOne({
         $or: [
           { barcodePack: updateData.barcodeUnit },
@@ -297,9 +304,24 @@ exports.updateProductData = async (req, res) => {
       updateData.productImage = req.file.path;
     }
 
+    // ✅ กรองข้อมูลที่ไม่มีค่าออก (ไม่ส่งไปอัพเดต)
+    const filteredUpdateData = {};
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] !== undefined && updateData[key] !== null && updateData[key] !== '') {
+        // ตรวจสอบ array
+        if (Array.isArray(updateData[key])) {
+          if (updateData[key].length > 0) {
+            filteredUpdateData[key] = updateData[key];
+          }
+        } else {
+          filteredUpdateData[key] = updateData[key];
+        }
+      }
+    });
+
     const updatedProduct = await ProductModel.findByIdAndUpdate(
       id,
-      updateData,
+      filteredUpdateData,
       { new: true }
     ).populate("categoryId", "categoryName")
      .populate("productStatuses", "statusName statusColor");
@@ -307,7 +329,6 @@ exports.updateProductData = async (req, res) => {
     if (!updatedProduct) {
       return res.status(404).json({ message: "ไม่พบสินค้า" });
     }
-
     res.status(200).json({
       message: "อัพเดทข้อมูลสำเร็จ",
       product: updatedProduct
@@ -316,6 +337,7 @@ exports.updateProductData = async (req, res) => {
     if (error.code === 11000) {
       return res.status(400).json({ message: "ข้อมูลซ้ำในระบบ (ชื่อหรือบาร์โค้ด)" });
     }
+    
     console.error("Error updating product:", error);
     res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัพเดทข้อมูล" });
   }
@@ -376,7 +398,7 @@ exports.getProductByBarcode = async (req, res) => {
 
 // ✅ ระบบจัดการล็อตใหม่
 
-// 📌 เพิ่มล็อตใหม่ให้กับสินค้า
+// �� เพิ่มล็อตใหม่ให้กับสินค้า
 exports.addLotToProduct = async (req, res) => {
   try {
     const { productId } = req.params;
@@ -409,7 +431,7 @@ exports.addLotToProduct = async (req, res) => {
   }
 };
 
-// 📌 ดึงข้อมูลล็อตทั้งหมดของสินค้า
+// �� ดึงข้อมูลล็อตทั้งหมดของสินค้า
 exports.getProductLots = async (req, res) => {
   try {
     const { productId } = req.params;
