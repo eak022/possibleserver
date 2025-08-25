@@ -9,7 +9,8 @@ const {
   updateOrderStatus, 
   createDisposeOrder,
   getOrderLotDetails,
-  getSalesReportByLots
+  getSalesReportByLots,
+  checkStripePayment // ✅ แก้ไขชื่อฟังก์ชัน
 } = require("../controllers/order.controller");
 
 router.post("/", createOrder); 
@@ -21,5 +22,8 @@ router.delete("/:id", deleteOrder);
 router.put("/:id", updateOrderDetail);
 router.patch("/:id/status", updateOrderStatus);
 router.post("/dispose", createDisposeOrder);
+
+// ✅ เพิ่ม route สำหรับตรวจสอบ Order จาก Stripe Payment Intent
+router.get("/check-stripe-payment/:paymentIntentId", checkStripePayment);
 
 module.exports = router;

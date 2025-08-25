@@ -47,7 +47,7 @@ exports.createPromotion = async (req, res) => {
     let lotsToApply = Array.isArray(appliedLots) ? appliedLots : (appliedLots ? [appliedLots] : []);
     if (lotsToApply.length > 0) {
       const now = new Date();
-      const eligibleLots = (product.lots || []).filter(l => l.status === 'active' && l.quantity > 0 && new Date(l.expirationDate) > now);
+      const eligibleLots = (product.lots || []).filter(l => l.status === 'active' && l.quantity > 0 && (l.expirationDate ? new Date(l.expirationDate) > now : true));
       const eligibleLotNumbers = new Set(eligibleLots.map(l => l.lotNumber));
       const invalidLots = lotsToApply.filter(lotNo => !eligibleLotNumbers.has(lotNo));
       if (invalidLots.length > 0) {
@@ -162,7 +162,7 @@ exports.updatePromotion = async (req, res) => {
       if (appliedLots) {
         const lotsToApply = Array.isArray(appliedLots) ? appliedLots : [appliedLots];
         const now = new Date();
-        const eligibleLots = (product.lots || []).filter(l => l.status === 'active' && l.quantity > 0 && new Date(l.expirationDate) > now);
+        const eligibleLots = (product.lots || []).filter(l => l.status === 'active' && l.quantity > 0 && (l.expirationDate ? new Date(l.expirationDate) > now : true));
         const eligibleLotNumbers = new Set(eligibleLots.map(l => l.lotNumber));
         const invalidLots = lotsToApply.filter(lotNo => !eligibleLotNumbers.has(lotNo));
         if (invalidLots.length > 0) {
@@ -175,7 +175,7 @@ exports.updatePromotion = async (req, res) => {
       const product = await ProductModel.findById(promotion.productId).lean();
       const lotsToApply = Array.isArray(appliedLots) ? appliedLots : [appliedLots];
       const now = new Date();
-      const eligibleLots = (product.lots || []).filter(l => l.status === 'active' && l.quantity > 0 && new Date(l.expirationDate) > now);
+              const eligibleLots = (product.lots || []).filter(l => l.status === 'active' && l.quantity > 0 && (l.expirationDate ? new Date(l.expirationDate) > now : true));
       const eligibleLotNumbers = new Set(eligibleLots.map(l => l.lotNumber));
       const invalidLots = lotsToApply.filter(lotNo => !eligibleLotNumbers.has(lotNo));
       if (invalidLots.length > 0) {

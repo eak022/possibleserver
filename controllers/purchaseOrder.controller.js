@@ -19,29 +19,16 @@ exports.updateDeliveryInfo = async (req, res) => {
       );
 
       if (productIndex !== -1) {
-        purchaseOrder.products[productIndex].deliveredQuantity = delivery.deliveredQuantity || 0;
+        // ใช้ค่าที่ส่งมาจาก frontend โดยตรง (รวมถึง 0)
+        purchaseOrder.products[productIndex].deliveredQuantity = delivery.deliveredQuantity;
         purchaseOrder.products[productIndex].actualPrice = delivery.actualPrice;
         purchaseOrder.products[productIndex].deliveryDate = delivery.deliveryDate;
         purchaseOrder.products[productIndex].deliveryNotes = delivery.deliveryNotes;
       }
     }
 
-    // คำนวณสถานะการส่งมอบ
-    const totalOrdered = purchaseOrder.products.reduce((sum, p) => sum + p.orderedQuantity, 0);
-    const totalDelivered = purchaseOrder.products.reduce((sum, p) => sum + (p.deliveredQuantity || 0), 0);
-
-    if (totalDelivered === 0) {
-      purchaseOrder.deliveryStatus = "not_delivered";
-    } else if (totalDelivered < totalOrdered) {
-      purchaseOrder.deliveryStatus = "partially_delivered";
-    } else {
-      purchaseOrder.deliveryStatus = "fully_delivered";
-    }
-
-    // ถ้าส่งมอบครบแล้ว ให้เปลี่ยนสถานะเป็น delivered
-    if (purchaseOrder.deliveryStatus === "fully_delivered") {
-      purchaseOrder.status = "delivered";
-    }
+    // ไม่ต้องคำนวณสถานะการส่งมอบ - ให้คงสถานะเดิมไว้
+    // สถานะจะถูกอัปเดตเป็น "fully_delivered" เมื่อเติมสินค้าเท่านั้น
 
     await purchaseOrder.save();
 
@@ -86,24 +73,23 @@ exports.receiveStockFromDelivery = async (req, res) => {
       // ใช้ข้อมูลการส่งมอบจริง
       const deliveredQuantity = item.deliveredQuantity || 0;
       if (deliveredQuantity === 0) {
+        console.log(`Skipping product ${product.productName}: deliveredQuantity is 0`);
         continue; // ข้ามสินค้าที่ยังไม่ส่งมอบ
       }
 
-      // ตรวจสอบว่ามีวันหมดอายุหรือไม่
-      if (!item.expirationDate) {
-        return res.status(400).json({ message: `Expiration date is required for product ${item.productId}` });
-      }
+      // ✅ ตรวจสอบว่ามีวันหมดอายุหรือไม่ (ไม่บังคับ)
+      // if (!item.expirationDate) {
+      //   return res.status(400).json({ message: `Expiration date is required for product ${item.productId}` });
+      // }
 
       // คำนวณจำนวนสินค้าที่จะเพิ่มเป็นล็อต
       let quantityToAdd;
       if (item.pack && product.packSize) {
         // ถ้าเป็นแพ็ค ให้คูณด้วย packSize
         quantityToAdd = deliveredQuantity * product.packSize;
-        console.log(`Adding pack: ${deliveredQuantity} packs × ${product.packSize} units = ${quantityToAdd} units`);
       } else {
         // ถ้าเป็นชิ้น ใช้จำนวนปกติ
         quantityToAdd = deliveredQuantity;
-        console.log(`Adding units: ${quantityToAdd} units`);
       }
 
       // ใช้ราคาจริงที่ส่งมอบ
@@ -112,19 +98,17 @@ exports.receiveStockFromDelivery = async (req, res) => {
       // ถ้าเป็นแพ็ค ให้หารด้วย packSize เพื่อได้ราคาต่อชิ้น
       if (item.pack && product.packSize && product.packSize > 0) {
         actualPurchasePrice = actualPurchasePrice / product.packSize;
-        console.log(`Converting pack price to unit price: ${item.actualPrice || item.estimatedPrice} / ${product.packSize} = ${actualPurchasePrice}`);
       }
 
       // ✅ สร้างล็อตใหม่แทนการเพิ่ม quantity
       await product.addLot({
         quantity: quantityToAdd,
         purchasePrice: actualPurchasePrice, // ราคาต่อชิ้น
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         purchaseOrderId: purchaseOrderId
       });
 
-      // เก็บ log การเปลี่ยนแปลง
-      console.log(`Updated product ${product.productName}: Added ${quantityToAdd} units, New total: ${product.totalQuantity}`);
+
       
       addedProducts.push({
         productName: product.productName,
@@ -173,23 +157,28 @@ exports.receiveStock = async (req, res) => {
         return res.status(404).json({ message: `Product with ID ${item.productId} not found` });
       }
 
-      // ตรวจสอบว่ามีวันหมดอายุหรือไม่
-      if (!item.expirationDate) {
-        return res.status(400).json({ message: `Expiration date is required for product ${item.productId}` });
-      }
+      // ✅ ตรวจสอบว่ามีวันหมดอายุหรือไม่ (ไม่บังคับ)
+      // if (!item.expirationDate) {
+      //   return res.status(400).json({ message: `Expiration date is required for product ${item.productId}` });
+      // }
 
       // ✅ ระบบล็อตใหม่ - เพิ่มสต็อกใหม่ได้เสมอ ไม่ว่าสต็อกเก่าจะเหลือหรือไม่
+
+      // ตรวจสอบว่ามีการส่งมอบหรือไม่
+      const deliveredQty = item.deliveredQuantity || 0;
+      if (deliveredQty === 0) {
+        console.log(`Skipping product ${product.productName}: deliveredQuantity is 0`);
+        continue; // ข้ามสินค้าที่ยังไม่ส่งมอบ
+      }
 
       // คำนวณจำนวนสินค้าที่จะเพิ่มเป็นล็อต
       let quantityToAdd;
       if (item.pack && product.packSize) {
         // ถ้าเป็นแพ็ค ให้คูณด้วย packSize
-        quantityToAdd = (item.deliveredQuantity || item.orderedQuantity) * product.packSize;
-        console.log(`Adding pack: ${item.deliveredQuantity || item.orderedQuantity} packs × ${product.packSize} units = ${quantityToAdd} units`);
+        quantityToAdd = deliveredQty * product.packSize;
       } else {
         // ถ้าเป็นชิ้น ใช้จำนวนปกติ
-        quantityToAdd = item.deliveredQuantity || item.orderedQuantity;
-        console.log(`Adding units: ${quantityToAdd} units`);
+        quantityToAdd = deliveredQty;
       }
 
       // ใช้ราคาจริงที่ส่งมอบ
@@ -205,7 +194,7 @@ exports.receiveStock = async (req, res) => {
       await product.addLot({
         quantity: quantityToAdd,
         purchasePrice: actualPurchasePrice, // ราคาต่อชิ้น
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         purchaseOrderId: purchaseOrderId
       });
 
@@ -223,17 +212,8 @@ exports.receiveStock = async (req, res) => {
     // ✅ เปลี่ยนสถานะของใบสั่งซื้อเป็น completed เมื่อเติมสินค้าทั้งหมดแล้ว
     purchaseOrder.status = "completed";
     
-    // อัพเดตสถานะการส่งมอบ
-    const totalOrdered = purchaseOrder.products.reduce((sum, p) => sum + p.orderedQuantity, 0);
-    const totalDelivered = purchaseOrder.products.reduce((sum, p) => sum + (p.deliveredQuantity || 0), 0);
-
-    if (totalDelivered === 0) {
-      purchaseOrder.deliveryStatus = "not_delivered";
-    } else if (totalDelivered < totalOrdered) {
-      purchaseOrder.deliveryStatus = "partially_delivered";
-    } else {
-      purchaseOrder.deliveryStatus = "fully_delivered";
-    }
+    // เมื่อเติมสินค้าแล้ว ให้สถานะเป็น "ส่งมอบครบแล้ว" เท่านั้น
+    purchaseOrder.deliveryStatus = "fully_delivered";
     
     await purchaseOrder.save();
 
@@ -265,9 +245,9 @@ exports.createPurchaseOrder = async (req, res) => {
         return res.status(404).json({ message: `Product not found for ID: ${item.productId}` });
       }
 
-      // คำนวณราคาตามประเภทการขาย (แพ็คหรือชิ้น) - ใช้ averagePurchasePrice
-      const estimatedPrice = item.pack ? (product.averagePurchasePrice || 0) * product.packSize : (product.averagePurchasePrice || 0);
-      const sellingPricePerUnit = item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit;
+      // ✅ ใช้ราคาซื้อที่ frontend ส่งมา (item.estimatedPrice) แทนที่จะใช้ averagePurchasePrice
+      const estimatedPrice = item.estimatedPrice || 0;
+      const sellingPricePerUnit = item.sellingPricePerUnit || (item.pack ? product.sellingPricePerPack : product.sellingPricePerUnit);
 
       // คำนวณ subtotal ของแต่ละสินค้า
       const subtotal = item.orderedQuantity * estimatedPrice;
@@ -286,7 +266,7 @@ exports.createPurchaseOrder = async (req, res) => {
         deliveryDate: null, // ยังไม่มีวันที่ส่งมอบ
         deliveryNotes: "", // ยังไม่มีหมายเหตุ
         sellingPricePerUnit: sellingPricePerUnit,
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         subtotal: subtotal,
         pack: item.pack,
         packSize: item.packSize || product.packSize
@@ -370,7 +350,9 @@ exports.updatePurchaseOrder = async (req, res) => {
 
       // เก็บข้อมูลการส่งมอบเดิมไว้
       const existingProduct = existingPurchaseOrder.products.find(p => p.productId.toString() === item.productId);
-      const deliveredQuantity = item.deliveredQuantity !== undefined ? item.deliveredQuantity : (existingProduct ? existingProduct.deliveredQuantity : 0);
+      // ถ้า frontend ส่ง deliveredQuantity มา (รวมถึง 0) ให้ใช้ค่านั้น
+      // ถ้าไม่ได้ส่งมา ให้ใช้ค่าจากฐานข้อมูลเดิม
+      const deliveredQuantity = item.hasOwnProperty('deliveredQuantity') ? item.deliveredQuantity : (existingProduct ? existingProduct.deliveredQuantity : 0);
       const actualPrice = item.actualPrice !== undefined ? item.actualPrice : (existingProduct ? existingProduct.actualPrice : null);
       const deliveryDate = item.deliveryDate !== undefined ? item.deliveryDate : (existingProduct ? existingProduct.deliveryDate : null);
       const deliveryNotes = item.deliveryNotes !== undefined ? item.deliveryNotes : (existingProduct ? existingProduct.deliveryNotes : "");
@@ -398,7 +380,7 @@ exports.updatePurchaseOrder = async (req, res) => {
         deliveryDate: deliveryDate,
         deliveryNotes: deliveryNotes,
         sellingPricePerUnit: sellingPricePerUnit,
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         subtotal: subtotal,
         pack: item.pack,
         packSize: item.packSize || product.packSize
@@ -727,7 +709,7 @@ exports.addAllStockFromOrder = async (orderId) => {
       await product.addLot({
         quantity: quantityToAdd,
         purchasePrice: actualPurchasePrice, // ราคาต่อชิ้น
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         purchaseOrderId: order._id
       });
 
@@ -860,7 +842,9 @@ exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
 
       // เก็บข้อมูลการส่งมอบเดิมไว้
       const existingProduct = existingPurchaseOrder.products.find(p => p.productId.toString() === item.productId);
-      const deliveredQuantity = item.deliveredQuantity !== undefined ? item.deliveredQuantity : (existingProduct ? existingProduct.deliveredQuantity : 0);
+      // ถ้า frontend ส่ง deliveredQuantity มา (รวมถึง 0) ให้ใช้ค่านั้น
+      // ถ้าไม่ได้ส่งมา ให้ใช้ค่าจากฐานข้อมูลเดิม
+      const deliveredQuantity = item.hasOwnProperty('deliveredQuantity') ? item.deliveredQuantity : (existingProduct ? existingProduct.deliveredQuantity : 0);
       const actualPrice = item.actualPrice !== undefined ? item.actualPrice : (existingProduct ? existingProduct.actualPrice : null);
       const deliveryDate = item.deliveryDate !== undefined ? item.deliveryDate : (existingProduct ? existingProduct.deliveryDate : null);
       const deliveryNotes = item.deliveryNotes !== undefined ? item.deliveryNotes : (existingProduct ? existingProduct.deliveryNotes : "");
@@ -875,7 +859,7 @@ exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
         deliveryDate: deliveryDate,
         deliveryNotes: deliveryNotes,
         sellingPricePerUnit: sellingPricePerUnit,
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         subtotal: subtotal,
         pack: item.pack,
         packSize: item.packSize || product.packSize
@@ -906,17 +890,24 @@ exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
         continue;
       }
 
-      // ตรวจสอบว่ามีวันหมดอายุหรือไม่
-      if (!item.expirationDate) {
-        continue;
+      // ✅ ไม่ต้องตรวจสอบวันหมดอายุ - ให้สร้างล็อตได้เสมอ (รวมถึงล็อตที่ไม่มีวันหมดอายุ)
+      // if (!item.expirationDate) {
+      //   continue;
+      // }
+
+      // ตรวจสอบว่ามีการส่งมอบหรือไม่
+      const deliveredQty = item.deliveredQuantity || 0;
+      if (deliveredQty === 0) {
+        console.log(`Skipping product ${product.productName}: deliveredQuantity is 0`);
+        continue; // ข้ามสินค้าที่ยังไม่ส่งมอบ
       }
 
       // คำนวณจำนวนสินค้าที่จะเพิ่มเป็นล็อต
       let quantityToAdd;
       if (item.pack && product.packSize) {
-        quantityToAdd = (item.deliveredQuantity || item.orderedQuantity) * product.packSize;
+        quantityToAdd = deliveredQty * product.packSize;
       } else {
-        quantityToAdd = item.deliveredQuantity || item.orderedQuantity;
+        quantityToAdd = deliveredQty;
       }
 
       // ใช้ราคาจริงที่ส่งมอบ
@@ -931,7 +922,7 @@ exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
       await product.addLot({
         quantity: quantityToAdd,
         purchasePrice: actualPurchasePrice,
-        expirationDate: item.expirationDate,
+        expirationDate: item.expirationDate || null, // ถ้าไม่มีวันหมดอายุให้เป็น null
         purchaseOrderId: purchaseOrderId
       });
 
@@ -942,6 +933,11 @@ exports.updatePurchaseOrderAndRecreateLots = async (req, res) => {
         newTotal: product.totalQuantity
       });
     }
+
+    // เมื่อเติมสินค้าแล้ว ให้สถานะเป็น "ส่งมอบครบแล้ว" เท่านั้น
+    updatedPurchaseOrder.deliveryStatus = "fully_delivered";
+    
+    await updatedPurchaseOrder.save();
 
     res.status(200).json({ 
       message: "Purchase order updated and lots recreated successfully", 

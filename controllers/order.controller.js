@@ -116,7 +116,6 @@ exports.createOrder = async (req, res) => {
       }
       
       await productToReduce.save();
-      console.log(`Stock reduced for ${item.productName}:`, reductionResult.reductions);
 
       // ✅ เก็บข้อมูลล็อตที่ใช้ในการขาย
       const lotsUsed = reductionResult.reductions.map(reduction => {
@@ -640,5 +639,56 @@ exports.getSalesReportByLots = async (req, res) => {
   } catch (error) {
     console.error("Error generating sales report by lots:", error);
     res.status(500).json({ message: "Error generating sales report", error });
+  }
+};
+
+// ✅ ตรวจสอบ Order ที่สร้างจาก Stripe payment
+exports.checkStripePayment = async (req, res) => {
+  try {
+    const { paymentIntentId } = req.params;
+
+    if (!paymentIntentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ต้องระบุ Payment Intent ID'
+      });
+    }
+
+    console.log('🔍 Checking order for Stripe payment:', paymentIntentId);
+
+    // หา Order ที่มี paymentIntentId นี้
+    const order = await OrderModel.findOne({
+      'stripePayment.paymentIntentId': paymentIntentId
+    });
+
+    if (order) {
+      console.log('✅ Order found:', order._id);
+      res.status(200).json({
+        success: true,
+        message: 'Order found',
+        order: {
+          _id: order._id,
+          userName: order.userName,
+          total: order.total,
+          orderStatus: order.orderStatus,
+          orderDate: order.orderDate,
+          stripePayment: order.stripePayment
+        }
+      });
+    } else {
+      console.log('⚠️ Order not found for payment intent:', paymentIntentId);
+      res.status(200).json({
+        success: false,
+        message: 'Order not yet created',
+        order: null
+      });
+    }
+  } catch (error) {
+    console.error('❌ Check Stripe payment error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'เกิดข้อผิดพลาดในการตรวจสอบ Order',
+      error: error.message
+    });
   }
 };

@@ -16,6 +16,7 @@ const {
   checkStockAvailability,
   updateLotDetails,
   updateLotComplete,
+  changeLotNumber,
   generateInternalBarcode
 } = require("../controllers/product.controller");
 const { upload } = require("../middlewares/upload");
@@ -46,5 +47,8 @@ router.patch("/:productId/lots/:lotNumber/dispose", disposeLot);     // ตั�
 // ✅ ฟังก์ชันใหม่: แก้ไขข้อมูลล็อต
 router.patch("/:productId/lots/:lotNumber/details", updateLotDetails);     // แก้ไขราคาและวันหมดอายุ
 router.put("/:productId/lots/:lotNumber/complete", updateLotComplete);     // แก้ไขข้อมูลล็อตทั้งหมด
+
+// ✅ ฟังก์ชันใหม่: เปลี่ยนเลขล็อต
+router.put("/:productId/lots/:lotNumber/change-number", changeLotNumber);  // เปลี่ยนเลขล็อต
 
 module.exports = router;

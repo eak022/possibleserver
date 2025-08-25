@@ -8,6 +8,11 @@ const BASE_URL = process.env.BASE_URL;
 const PORT = process.env.PORT;
 const DB_URL = process.env.DB_URL;
 const API_URL = process.env.NODE_ENV === 'production' ? process.env.PROD_API_URL : process.env.DEV_API_URL;
+
+// Set default billing email for Stripe if not provided in .env
+if (!process.env.DEFAULT_BILLING_EMAIL) {
+  process.env.DEFAULT_BILLING_EMAIL = '654259022@webmail.npru.ac.th';
+}
 const userRouter = require("./routes/user.router");
 const supplierRouter = require("./routes/supplier.router");
 const purchaseOrderRouter  = require("./routes/purchaseOrder.router");
@@ -18,6 +23,8 @@ const productRouter  = require("./routes/product.router");
 const promotionRouter  = require("./routes/promotion.router");
 const statusRouter  = require("./routes/status.router");
 const notificationRouter = require('./routes/notification.router');
+const stripeRouter = require('./routes/stripe.router');
+const stripeController = require('./controllers/stripe.controller');
 const swaggerSetup = require('./docs/swagger');
 const { initializeStatuses } = require('./config/initialData');
 const authenticateToken = require("./middlewares/authJwt.middleware");
@@ -30,7 +37,12 @@ try {
 }
 
 const corsOptions = {
-  origin: [BASE_URL, API_URL], // อนุญาตทั้ง frontend และ API URL
+  origin: [
+    BASE_URL, 
+    API_URL, 
+    'http://localhost:5173',  // ✅ เพิ่ม localhost:5173
+    'https://posible.vercel.app'  // ✅ เพิ่ม production frontend
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
@@ -42,6 +54,28 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+
+// Stripe webhook must receive the raw body. Define it BEFORE JSON body parser.
+app.post('/api/v1/stripe/webhook', 
+  express.raw({ type: 'application/json' }), 
+  (req, res, next) => {
+    // Log webhook request for debugging
+    console.log('Webhook received:', {
+      method: req.method,
+      url: req.url,
+      headers: {
+        'stripe-signature': req.headers['stripe-signature'] ? 'present' : 'missing',
+        'content-type': req.headers['content-type'],
+        'content-length': req.headers['content-length']
+      },
+      bodyLength: req.body ? req.body.length : 0
+    });
+    next();
+  },
+  stripeController.handleWebhook
+);
+
+// JSON parsers for the rest of the routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -56,13 +90,10 @@ app.get("/", (req, res) => {
   res.send("<h1>Welcom to SE NPRU Blog resfull api</h1>");
 });
 
-// เพิ่ม handler สำหรับ POST / เพื่อรองรับ LINE Webhook Verify
-app.post("/", (req, res) => {
-  res.status(200).send("OK");
-});
-
-app.use("/api/v1/auth", userRouter);
+app.use("/api/v1/auth", userRouter); // Stripe routes (webhook ไม่ต้อง auth)
 app.use(authenticateToken);
+// Stripe JSON routes should be after body parser (and before auth if desired). Keep them public.
+app.use("/api/v1/stripe", stripeRouter);
 app.use("/api/v1/cart", cartRouter);
 app.use("/api/v1/category", categoryRouter);
 app.use("/api/v1/order", orderRouter);
