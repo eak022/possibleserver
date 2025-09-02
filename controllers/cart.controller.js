@@ -54,8 +54,8 @@ exports.createCart = async (req, res) => {
     try {
       const activePromotions = await PromotionModel.find({
         productId: product._id,
-        validityStart: { $lte: now },
-        validityEnd: { $gte: now }
+        validityStart: { $lte: now },//lteคือ น้อยกว่าหรือเท่ากับ
+        validityEnd: { $gte: now }//gteคือ มากกว่าหรือเท่ากับ
       });
       
       for (const promo of activePromotions) {

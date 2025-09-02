@@ -39,19 +39,19 @@ const ProductSchema = new Schema({
     
 }, { 
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    toJSON: { virtuals: true },//ใช้งาน virtual fields ตอนส่งข้อมูลไปยัง frontend (virtual คือฟิลด์ที่ไม่มีอยู่ในฐานข้อมูล เช่น totalQuantity, nearestExpirationDate, averagePurchasePrice)
+    toObject: { virtuals: true }//ใช้งาน virtual fields ตอนส่งข้อมูลไปยัง frontend (virtual คือฟิลด์ที่ไม่มีอยู่ในฐานข้อมูล เช่น totalQuantity, nearestExpirationDate, averagePurchasePrice)
 });
 
 // ✅ Virtual fields สำหรับคำนวณข้อมูลจาก lots
-ProductSchema.virtual('totalQuantity').get(function() {
+ProductSchema.virtual('totalQuantity').get(function() { // คำนวณจำนวนสินค้าทั้งหมดจากล็อตที่ active และมากกว่า 0
     const lots = Array.isArray(this.lots) ? this.lots : [];
     return lots
         .filter(lot => lot.status === 'active' && lot.quantity > 0)
         .reduce((total, lot) => total + lot.quantity, 0);
 });
 
-ProductSchema.virtual('nearestExpirationDate').get(function() {
+ProductSchema.virtual('nearestExpirationDate').get(function() { // หาวันหมดอายุที่ใกล้ที่สุดจากล็อตที่ active
     const lots = Array.isArray(this.lots) ? this.lots : [];
     const activeLots = lots.filter(lot => lot.status === 'active');
     if (activeLots.length === 0) return null;
@@ -63,7 +63,7 @@ ProductSchema.virtual('nearestExpirationDate').get(function() {
     return new Date(Math.min(...lotsWithExpiration.map(lot => lot.expirationDate)));
 });
 
-ProductSchema.virtual('averagePurchasePrice').get(function() {
+ProductSchema.virtual('averagePurchasePrice').get(function() {// คำนวณราคาซื้อเฉลี่ยจากล็อตที่ active
     const lots = Array.isArray(this.lots) ? this.lots : [];
     const activeLots = lots.filter(lot => lot.status === 'active');
     if (activeLots.length === 0) return 0;
@@ -72,8 +72,8 @@ ProductSchema.virtual('averagePurchasePrice').get(function() {
     return totalQuantity > 0 ? totalValue / totalQuantity : 0;
 });
 
-// ✅ Instance methods สำหรับจัดการล็อต
-ProductSchema.methods.addLot = function(lotData) {
+// ✅ Instance methods สำหรับจัดการล็อต //ทำให้ไม่ต้องมาสร้างฟังก์ชันใน controllerซ้ำๆ ที่มีการทำงานเดิมๆ
+ProductSchema.methods.addLot = function(lotData) {// เพิ่มล็อตใหม่
     const lotNumber = lotData.lotNumber || this.generateLotNumber();
     
     // ✅ ตรวจสอบความซ้ำซ้อนของเลขล็อต
@@ -85,9 +85,10 @@ ProductSchema.methods.addLot = function(lotData) {
     // ✅ จัดการ expirationDate ให้ถูกต้อง
     let expirationDate = null;
     if (lotData.expirationDate) {
-        // ตรวจสอบว่าวันที่ที่ส่งมาเป็นวันที่ที่ถูกต้องหรือไม่
+       
         const date = new Date(lotData.expirationDate);
-        if (!isNaN(date.getTime())) {
+         // ตรวจสอบว่าวันที่ที่ส่งมาเป็นวันที่ที่ถูกต้องหรือไม่
+        if (!isNaN(date.getTime())) {//isNaN()จะตรวจสอบว่าเป็นNaNหรือไม่ date.getTime()จะตรวจสอบว่าเป็นวันที่ที่ถูกต้องหรือไม่โดยการแปลงเป็น timestamp(จำนวนวินาทีตั้งแต่วันที่ 1 มกราคม 1970)
             expirationDate = date;
         }
     }
@@ -97,22 +98,23 @@ ProductSchema.methods.addLot = function(lotData) {
         quantity: lotData.quantity,
         purchasePrice: lotData.purchasePrice,
         expirationDate: expirationDate, // จะเป็น null ถ้าไม่มีวันหมดอายุ
-        receivedDate: lotData.receivedDate || new Date(),
+        receivedDate: lotData.receivedDate || new Date(),//วันที่รับสินค้า
         purchaseOrderId: lotData.purchaseOrderId,
         status: 'active'
     });
     return this.save();
 };
 
-ProductSchema.methods.reduceLotQuantity = function(requiredQuantity, options = {}) {
-    const { includeOnlyLotNumbers, excludeLotNumbers } = options;
-    const includeSet = Array.isArray(includeOnlyLotNumbers) ? new Set(includeOnlyLotNumbers) : null;
-    const excludeSet = Array.isArray(excludeLotNumbers) ? new Set(excludeLotNumbers) : null;
+ProductSchema.methods.reduceLotQuantity = function(requiredQuantity, options = {}) {// ลดจำนวนสินค้าในล็อต แบบ FIFO
+    const { includeOnlyLotNumbers, excludeLotNumbers } = options; //Destructuring assignment ดึงค่าจาก options
+    const includeSet = Array.isArray(includeOnlyLotNumbers) ? new Set(includeOnlyLotNumbers) : null;//ล็อตที่ลดจำนวนได้
+    const excludeSet = Array.isArray(excludeLotNumbers) ? new Set(excludeLotNumbers) : null;//ล็อตที่ลดจำนวนไม่ได้
+    //set เป็น object แบบ collection ที่คล้ายกับ Arrayแต่เป็นการเก็บข้อมูลที่ไม่ซ้ำกัน ตรวจสอบค่าที่มีอยู่ได้เร็วกว่า Array ไม่มีลำดับ(index)
 
     // ✅ FIFO - ตัดจากล็อตที่หมดอายุเร็วสุดก่อน (ตามเงื่อนไขกรอง)
     // แต่ถ้าไม่มีวันหมดอายุ ให้ตัดจากล็อตที่ไม่มีวันหมดอายุก่อน
-    const lotsArray = Array.isArray(this.lots) ? this.lots : [];
-    const activeLots = lotsArray
+    const lotsArray = Array.isArray(this.lots) ? this.lots : []; //ตรวจสอบว่า this.lots เป็น array หรือไม่
+    const activeLots = lotsArray //กรองล็อตที่active
         .filter(lot => lot.status === 'active' && lot.quantity > 0)
         .filter(lot => (includeSet ? includeSet.has(lot.lotNumber) : true))
         .filter(lot => (excludeSet ? !excludeSet.has(lot.lotNumber) : true))
@@ -130,20 +132,20 @@ ProductSchema.methods.reduceLotQuantity = function(requiredQuantity, options = {
             return new Date(a.expirationDate) - new Date(b.expirationDate);
         });
 
-    let remainingToReduce = requiredQuantity;
-    const reductions = [];
+    let remainingToReduce = requiredQuantity;//จำนวนที่ยังต้องลด
+    const reductions = [];//การลดจำนวนสินค้าในล็อต
 
-    for (let lot of activeLots) {
+    for (let lot of activeLots) {//for…of loop จะ ลูปlotใน activeLots
         if (remainingToReduce <= 0) break;
 
-        const quantityToTake = Math.min(lot.quantity, remainingToReduce);
+        const quantityToTake = Math.min(lot.quantity, remainingToReduce);//จำนวนที่จะลดจากล็อต เอาน้อยที่สุดระหว่างจำนวนในล็อต กับ จำนวนที่ยังต้องลด
         lot.quantity -= quantityToTake;
         remainingToReduce -= quantityToTake;
 
         reductions.push({
             lotNumber: lot.lotNumber,
             quantityTaken: quantityToTake,
-            remainingInLot: lot.quantity
+            remainingInLot: lot.quantity 
         });
 
         if (lot.quantity === 0) {

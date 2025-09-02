@@ -41,17 +41,17 @@ const OrderSchema = new Schema({
   },
   // ✅ ข้อมูลการชำระเงินด้วย Stripe
   stripePayment: {
-    paymentIntentId: { type: String },
+    paymentIntentId: { type: String },//รหัสการชำระเงินด้วย Stripe
     paymentStatus: { 
       type: String, 
       enum: ["pending", "succeeded", "failed", "canceled"],
       default: "pending"
     },
     qrCodeUrl: { type: String },
-    paidAt: { type: Date },
-    failureReason: { type: String }
+    paidAt: { type: Date },//เวลาชำระเงินสำเร็จ
+    failureReason: { type: String }//เหตุผลการชำระเงินไม่สำเร็จ
   },
-  cash_received: { type: Number, default: 0 },
+  cash_received: { type: Number, default: 0 },//จำนวนเงินที่รับเงินสด
   change: { type: Number, default: 0 },
   orderDate: { type: Date, required: true },
   orderStatus: { 
