@@ -15,7 +15,7 @@ const {
   autoAddStockForAllZeroStock,
   updatePurchaseOrderAndRecreateLots
 } = require("../controllers/purchaseOrder.controller");
-const updateProductStatus = require("../middlewares/productStatusMiddleware");
+const { updateProductStatus } = require("../middlewares/productStatusMiddleware");
 
 router.post("/",createPurchaseOrder);
 router.post("/:id/receive", updateProductStatus, receiveStock);

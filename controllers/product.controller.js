@@ -1,5 +1,6 @@
 const ProductModel = require("../models/Product");
-const cloudinary = require("../utils/cloudinary"); 
+const cloudinary = require("../utils/cloudinary");
+const { updateLotStatuses } = require("../middlewares/productStatusMiddleware"); 
 
 // ✅ Helper: คำนวณเลขตรวจสอบ EAN-13 (check digit)
 function calculateEan13CheckDigit(twelveDigits) {
@@ -685,5 +686,29 @@ exports.changeLotNumber = async (req, res) => {
       return res.status(400).json({ message: error.message });
     }
     return res.status(500).json({ message: error.message || "เกิดข้อผิดพลาดในการเปลี่ยนเลขล็อต" });
+  }
+};
+
+// ✅ อัปเดตสถานะล็อตที่หมดอายุ
+exports.updateExpiredLotStatuses = async (req, res) => {
+  try {
+    const result = await updateLotStatuses();
+    
+    if (result.success) {
+      res.status(200).json({
+        message: `อัปเดตสถานะล็อตที่หมดอายุเรียบร้อย (${result.updatedProducts} สินค้า)`,
+        updatedProducts: result.updatedProducts
+      });
+    } else {
+      res.status(500).json({
+        message: 'เกิดข้อผิดพลาดในการอัปเดตสถานะล็อต',
+        error: result.error
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: 'เกิดข้อผิดพลาดในการอัปเดตสถานะล็อต',
+      error: error.message
+    });
   }
 };

@@ -17,10 +17,11 @@ const {
   updateLotDetails,
   updateLotComplete,
   changeLotNumber,
-  generateInternalBarcode
+  generateInternalBarcode,
+  updateExpiredLotStatuses
 } = require("../controllers/product.controller");
 const { upload } = require("../middlewares/upload");
-const updateProductStatus = require("../middlewares/productStatusMiddleware");
+const { updateProductStatus } = require("../middlewares/productStatusMiddleware");
 
 // ใช้ middleware อัพเดทสถานะสินค้าก่อนเรียกใช้ controller
 router.use(updateProductStatus);
@@ -50,5 +51,8 @@ router.put("/:productId/lots/:lotNumber/complete", updateLotComplete);     // �
 
 // ✅ ฟังก์ชันใหม่: เปลี่ยนเลขล็อต
 router.put("/:productId/lots/:lotNumber/change-number", changeLotNumber);  // เปลี่ยนเลขล็อต
+
+// ✅ อัปเดตสถานะล็อตที่หมดอายุ
+router.post("/update-expired-lot-statuses", updateExpiredLotStatuses);  // อัปเดตสถานะล็อตที่หมดอายุ
 
 module.exports = router;

@@ -32,11 +32,20 @@ exports.getAllNotifications = async (req, res) => {
         products.forEach(product => {
             product.productStatuses.forEach(status => {
                 if (status.statusName === 'สินค้าใกล้หมด' || status.statusName === 'สินค้าหมด') {
+                    // คำนวณจำนวนที่ขายได้ (เฉพาะล็อตที่ยังไม่หมดอายุ)
+                    const currentDate = new Date();
+                    const sellableQuantity = product.lots.filter(lot => 
+                        lot.status === 'active' && 
+                        lot.quantity > 0 && 
+                        (!lot.expirationDate || new Date(lot.expirationDate) > currentDate)
+                    ).reduce((total, lot) => total + lot.quantity, 0);
+                    
                     notifications.lowStock.push({
                         productId: product._id,
                         productName: product.productName,
                         productImage: product.productImage,
-                        quantity: product.totalQuantity,
+                        quantity: sellableQuantity,
+                        lots: product.lots, // ส่งข้อมูล lots ไปด้วย
                         status: status.statusName,
                         statusColor: status.statusColor
                     });
@@ -46,6 +55,7 @@ exports.getAllNotifications = async (req, res) => {
                         productName: product.productName,
                         productImage: product.productImage,
                         expirationDate: product.nearestExpirationDate,
+                        lots: product.lots, // ส่งข้อมูล lots ไปด้วย
                         status: status.statusName,
                         statusColor: status.statusColor
                     });
@@ -53,17 +63,30 @@ exports.getAllNotifications = async (req, res) => {
                     // คำนวณจำนวนล็อตที่หมดอายุและมีสต็อกอยู่
                     const currentDate = new Date();
                     const expiredLots = product.lots.filter(lot => {
-                        const expirationDate = new Date(lot.expirationDate);
-                        return lot.status === 'active' && lot.quantity > 0 && expirationDate <= currentDate;
+                        // ตรวจสอบว่าล็อตมีวันหมดอายุและหมดอายุแล้ว
+                        return lot.status === 'active' && 
+                               lot.quantity > 0 && 
+                               lot.expirationDate && 
+                               new Date(lot.expirationDate) <= currentDate;
                     });
                     const totalExpiredQuantity = expiredLots.reduce((sum, lot) => sum + lot.quantity, 0);
+                    
+                    // หาวันหมดอายุที่เก่าที่สุดจากล็อตที่หมดอายุ
+                    const oldestExpiredDate = expiredLots.length > 0 
+                        ? expiredLots.reduce((oldest, lot) => {
+                            const lotExpirationDate = new Date(lot.expirationDate);
+                            return lotExpirationDate < oldest ? lotExpirationDate : oldest;
+                        }, new Date(expiredLots[0].expirationDate))
+                        : null;
 
                     notifications.expired.push({
                         productId: product._id,
                         productName: product.productName,
                         productImage: product.productImage,
-                        expirationDate: product.nearestExpirationDate,
+                        expirationDate: oldestExpiredDate, // วันที่หมดอายุจากล็อตที่หมดอายุจริง
                         quantity: totalExpiredQuantity, // จำนวนล็อตที่หมดอายุและมีสต็อก
+                        lots: product.lots, // ส่งข้อมูล lots ไปด้วย
+                        expiredLots: expiredLots, // ส่งข้อมูลล็อตที่หมดอายุไปด้วย
                         status: status.statusName,
                         statusColor: status.statusColor
                     });
@@ -103,14 +126,25 @@ exports.getLowStockNotifications = async (req, res) => {
             productStatuses: lowStockStatus._id
         }).populate('productStatuses');
 
-        const notifications = products.map(product => ({
-            productId: product._id,
-            productName: product.productName,
-            productImage: product.productImage,
-            quantity: product.totalQuantity,
-            status: 'สินค้าใกล้หมด',
-            statusColor: lowStockStatus.statusColor
-        }));
+        const notifications = products.map(product => {
+            // คำนวณจำนวนที่ขายได้ (เฉพาะล็อตที่ยังไม่หมดอายุ)
+            const currentDate = new Date();
+            const sellableQuantity = product.lots.filter(lot => 
+                lot.status === 'active' && 
+                lot.quantity > 0 && 
+                (!lot.expirationDate || new Date(lot.expirationDate) > currentDate)
+            ).reduce((total, lot) => total + lot.quantity, 0);
+            
+            return {
+                productId: product._id,
+                productName: product.productName,
+                productImage: product.productImage,
+                quantity: sellableQuantity,
+                lots: product.lots, // ส่งข้อมูล lots ไปด้วย
+                status: 'สินค้าใกล้หมด',
+                statusColor: lowStockStatus.statusColor
+            };
+        });
 
         res.json({
             success: true,

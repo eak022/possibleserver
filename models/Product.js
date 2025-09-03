@@ -25,12 +25,13 @@ const ProductSchema = new Schema({
         default: [],
         validate: {
             validator: function(lots) {
-                // ตรวจสอบความซ้ำซ้อนของเลขล็อต
-                const lotNumbers = lots.map(lot => lot.lotNumber);
+                // ตรวจสอบความซ้ำซ้อนของเลขล็อต (เฉพาะล็อตที่ยังไม่ถูก dispose)
+                const activeLots = lots.filter(lot => lot.status !== 'disposed');
+                const lotNumbers = activeLots.map(lot => lot.lotNumber);
                 const uniqueLotNumbers = new Set(lotNumbers);
                 return lotNumbers.length === uniqueLotNumbers.size;
             },
-            message: 'เลขล็อตไม่สามารถซ้ำกันได้'
+            message: 'เลขล็อตที่ยังใช้งานอยู่ไม่สามารถซ้ำกันได้'
         }
     },
     // ข้อมูลราคาขาย (ใช้ร่วมกันทุกล็อต)
@@ -74,12 +75,13 @@ ProductSchema.virtual('averagePurchasePrice').get(function() {// คำนวณ
 
 // ✅ Instance methods สำหรับจัดการล็อต //ทำให้ไม่ต้องมาสร้างฟังก์ชันใน controllerซ้ำๆ ที่มีการทำงานเดิมๆ
 ProductSchema.methods.addLot = function(lotData) {// เพิ่มล็อตใหม่
-    const lotNumber = lotData.lotNumber || this.generateLotNumber();
+    let lotNumber = lotData.lotNumber || this.generateLotNumber();
     
-    // ✅ ตรวจสอบความซ้ำซ้อนของเลขล็อต
+    // ✅ ตรวจสอบความซ้ำซ้อนของเลขล็อต และสร้างเลขใหม่ถ้าซ้ำ
     const existingLotNumbers = this.lots.map(lot => lot.lotNumber);
     if (existingLotNumbers.includes(lotNumber)) {
-        return Promise.reject(new Error(`เลขล็อต ${lotNumber} มีอยู่แล้วในสินค้านี้`));
+        console.log(`Lot number ${lotNumber} already exists, generating new one...`);
+        lotNumber = this.generateLotNumber();
     }
     
     // ✅ จัดการ expirationDate ให้ถูกต้อง
@@ -167,12 +169,23 @@ ProductSchema.methods.generateLotNumber = function() {
     
     let nextNumber = 1;
     let lotNumber;
+    let attempts = 0;
+    const maxAttempts = 1000; // ป้องกัน infinite loop
     
     // หาเลขล็อตถัดไปที่ไม่ซ้ำกัน
     do {
         lotNumber = `LOT${nextNumber.toString().padStart(3, '0')}`;
         nextNumber++;
+        attempts++;
+        
+        if (attempts > maxAttempts) {
+            throw new Error('ไม่สามารถสร้างเลขล็อตที่ไม่ซ้ำได้');
+        }
     } while (existingLotNumbers.has(lotNumber));
+    
+    console.log(`Generated lot number: ${lotNumber} for product: ${this.productName}`);
+    console.log(`Existing lot numbers:`, Array.from(existingLotNumbers));
+    console.log(`Attempts made: ${attempts}`);
     
     return lotNumber;
 };
