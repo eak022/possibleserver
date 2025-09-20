@@ -64,7 +64,7 @@ exports.getAllNotifications = async (req, res) => {
                     const currentDate = new Date();
                     const expiredLots = product.lots.filter(lot => {
                         // ตรวจสอบว่าล็อตมีวันหมดอายุและหมดอายุแล้ว
-                        return lot.status === 'active' && 
+                        return lot.status === 'expired' || lot.status === 'active' && 
                                lot.quantity > 0 && 
                                lot.expirationDate && 
                                new Date(lot.expirationDate) <= currentDate;

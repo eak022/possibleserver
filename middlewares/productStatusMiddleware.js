@@ -62,6 +62,9 @@ const updateProductStatus = async (req, res, next) => {
                     newStatuses = [outOfStockStatus];
                 } else if (product.nearestExpirationDate && product.nearestExpirationDate <= now) {
                     newStatuses = [expiredStatus]; // ถ้าหมดอายุแล้ว ให้มีแค่สถานะหมดอายุอย่างเดียว (แต่สินค้าต้องไม่หมด)
+                } else if (product.lots.some(lot => lot.status === 'expired' && lot.quantity > 0)) {
+                    // ตรวจสอบว่ามี lot ที่หมดอายุและมีสต็อกอยู่
+                    newStatuses = [expiredStatus];
                 } else {
                     // ตรวจสอบสินค้าใกล้หมด (ใช้จำนวนจากล็อตที่ขายได้)
                     const sellableQuantity = sellableLots.reduce((total, lot) => total + lot.quantity, 0);

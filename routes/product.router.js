@@ -18,7 +18,9 @@ const {
   updateLotComplete,
   changeLotNumber,
   generateInternalBarcode,
-  updateExpiredLotStatuses
+  updateExpiredLotStatuses,
+  // ✅ Product status functions
+  updateAllProductStatuses
 } = require("../controllers/product.controller");
 const { upload } = require("../middlewares/upload");
 const { updateProductStatus } = require("../middlewares/productStatusMiddleware");
@@ -54,5 +56,8 @@ router.put("/:productId/lots/:lotNumber/change-number", changeLotNumber);  // �
 
 // ✅ อัปเดตสถานะล็อตที่หมดอายุ
 router.post("/update-expired-lot-statuses", updateExpiredLotStatuses);  // อัปเดตสถานะล็อตที่หมดอายุ
+
+// ✅ อัปเดตสถานะสินค้าทั้งหมด (บังคับ)
+router.post("/update-all-statuses", updateAllProductStatuses);  // อัปเดตสถานะสินค้าทั้งหมด
 
 module.exports = router;

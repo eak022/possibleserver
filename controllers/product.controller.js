@@ -344,6 +344,34 @@ exports.updateProductData = async (req, res) => {
   }
 };
 
+// 📌 POST: อัปเดตสถานะสินค้าทั้งหมด (บังคับ)
+exports.updateAllProductStatuses = async (req, res) => {
+  try {
+    const { updateProductStatus } = require('../middlewares/productStatusMiddleware');
+    
+    // สร้าง mock request และ response
+    const mockReq = {};
+    const mockRes = {
+      json: (data) => res.json({ message: "อัปเดตสถานะสินค้าสำเร็จ", ...data }),
+      status: (code) => ({ json: (data) => res.status(code).json(data) })
+    };
+    const mockNext = (error) => {
+      if (error) {
+        console.error('Error in updateAllProductStatuses:', error);
+        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัปเดตสถานะสินค้า" });
+      }
+      return res.json({ message: "อัปเดตสถานะสินค้าสำเร็จ" });
+    };
+    
+    // เรียกใช้ middleware
+    await updateProductStatus(mockReq, mockRes, mockNext);
+    
+  } catch (error) {
+    console.error('Error updating all product statuses:', error);
+    res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัปเดตสถานะสินค้า" });
+  }
+};
+
 // 📌 DELETE: ลบสินค้า
 exports.deleteProductById = async (req, res) => {
   const { id } = req.params;
