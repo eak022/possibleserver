@@ -13,12 +13,18 @@ exports.getAllNotifications = async (req, res) => {
         ]);
 
         // ดึงสินค้าทั้งหมดที่มีสถานะที่ต้องการแจ้งเตือน
+        // และรองรับกรณีที่ยังไม่ได้อัปเดตสถานะสินค้า แต่มีล็อตที่หมดอายุจริง
+        const now = new Date();
         const products = await ProductModel.find({
             $or: [
                 { productStatuses: lowStockStatus._id },
                 { productStatuses: outOfStockStatus._id },
                 { productStatuses: expiringStatus._id },
-                { productStatuses: expiredStatus._id }
+                { productStatuses: expiredStatus._id },
+                // ล็อตที่มีวันหมดอายุ <= วันนี้ และยังมีสต็อกอยู่
+                { lots: { $elemMatch: { quantity: { $gt: 0 }, expirationDate: { $exists: true, $ne: null, $lte: now } } } },
+                // ล็อตที่ถูกมาร์กว่า expired และยังมีสต็อกอยู่
+                { lots: { $elemMatch: { quantity: { $gt: 0 }, status: 'expired' } } }
             ]
         }).populate('productStatuses');
 
@@ -30,6 +36,7 @@ exports.getAllNotifications = async (req, res) => {
         };
 
         products.forEach(product => {
+            let pushedExpired = false;
             product.productStatuses.forEach(status => {
                 if (status.statusName === 'สินค้าใกล้หมด' || status.statusName === 'สินค้าหมด') {
                     // คำนวณจำนวนที่ขายได้ (เฉพาะล็อตที่ยังไม่หมดอายุ)
@@ -63,35 +70,56 @@ exports.getAllNotifications = async (req, res) => {
                     // คำนวณจำนวนล็อตที่หมดอายุและมีสต็อกอยู่
                     const currentDate = new Date();
                     const expiredLots = product.lots.filter(lot => {
-                        // ตรวจสอบว่าล็อตมีวันหมดอายุและหมดอายุแล้ว
-                        return lot.status === 'expired' || lot.status === 'active' && 
-                               lot.quantity > 0 && 
-                               lot.expirationDate && 
-                               new Date(lot.expirationDate) <= currentDate;
+                        return lot.status === 'expired' || (lot.status === 'active' && lot.quantity > 0 && lot.expirationDate && new Date(lot.expirationDate) <= currentDate);
                     });
-                    const totalExpiredQuantity = expiredLots.reduce((sum, lot) => sum + lot.quantity, 0);
-                    
-                    // หาวันหมดอายุที่เก่าที่สุดจากล็อตที่หมดอายุ
-                    const oldestExpiredDate = expiredLots.length > 0 
-                        ? expiredLots.reduce((oldest, lot) => {
+                    if (expiredLots.length > 0) {
+                        const totalExpiredQuantity = expiredLots.reduce((sum, lot) => sum + lot.quantity, 0);
+                        const oldestExpiredDate = expiredLots.reduce((oldest, lot) => {
                             const lotExpirationDate = new Date(lot.expirationDate);
-                            return lotExpirationDate < oldest ? lotExpirationDate : oldest;
-                        }, new Date(expiredLots[0].expirationDate))
-                        : null;
+                            return oldest ? (lotExpirationDate < oldest ? lotExpirationDate : oldest) : lotExpirationDate;
+                        }, null);
+                        notifications.expired.push({
+                            productId: product._id,
+                            productName: product.productName,
+                            productImage: product.productImage,
+                            expirationDate: oldestExpiredDate,
+                            quantity: totalExpiredQuantity,
+                            lots: product.lots,
+                            expiredLots: expiredLots,
+                            status: status.statusName,
+                            statusColor: status.statusColor
+                        });
+                        pushedExpired = true;
+                    }
+                }
+            });
 
+            // หากยังไม่ได้ push หมดอายุจากสถานะ แต่มีล็อตหมดอายุ ให้แจ้งเตือนหมดอายุด้วย
+            if (!pushedExpired) {
+                const currentDate = new Date();
+                const expiredLots = (product.lots || []).filter(lot => {
+                    return (lot.status === 'expired' || (lot.status === 'active' && lot.expirationDate && new Date(lot.expirationDate) <= currentDate)) && (lot.quantity || 0) > 0;
+                });
+                if (expiredLots.length > 0) {
+                    const totalExpiredQuantity = expiredLots.reduce((sum, lot) => sum + lot.quantity, 0);
+                    const oldestExpiredDate = expiredLots.reduce((oldest, lot) => {
+                        const lotExpirationDate = new Date(lot.expirationDate);
+                        return oldest ? (lotExpirationDate < oldest ? lotExpirationDate : oldest) : lotExpirationDate;
+                    }, null);
                     notifications.expired.push({
                         productId: product._id,
                         productName: product.productName,
                         productImage: product.productImage,
-                        expirationDate: oldestExpiredDate, // วันที่หมดอายุจากล็อตที่หมดอายุจริง
-                        quantity: totalExpiredQuantity, // จำนวนล็อตที่หมดอายุและมีสต็อก
-                        lots: product.lots, // ส่งข้อมูล lots ไปด้วย
-                        expiredLots: expiredLots, // ส่งข้อมูลล็อตที่หมดอายุไปด้วย
-                        status: status.statusName,
-                        statusColor: status.statusColor
+                        expirationDate: oldestExpiredDate,
+                        quantity: totalExpiredQuantity,
+                        lots: product.lots,
+                        expiredLots: expiredLots,
+                        status: 'หมดอายุ',
+                        statusColor: '#ef4444' // สีแดงเป็นค่าเริ่มต้น หากไม่มีสถานะใน DB
                     });
                 }
-            });
+            }
+            
         });
 
         // นับจำนวนการแจ้งเตือนแต่ละประเภท
