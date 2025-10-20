@@ -1025,11 +1025,41 @@
         "post": {
           "tags": ["User"],
           "summary": "User logout",
-          "description": "Logout current user",
+          "description": "Logout current user (requires valid access token cookie)",
+          "security": [
+            { "cookieAuth": [] }
+          ],
           "responses": {
-            "200": {
-              "description": "Logout successful"
-            }
+            "200": { "description": "Logout successful" },
+            "401": { "description": "Access token is missing or invalid" }
+          }
+        }
+      },
+
+      "/api/v1/auth/refresh-token": {
+        "post": {
+          "tags": ["User"],
+          "summary": "Refresh access token",
+          "description": "Issue a new access token using HttpOnly refresh token cookie",
+          "responses": {
+            "200": { "description": "Token refreshed successfully" },
+            "401": { "description": "Refresh token missing/expired/revoked" },
+            "403": { "description": "Invalid refresh token" }
+          }
+        }
+      },
+
+      "/api/v1/auth/check-auth": {
+        "get": {
+          "tags": ["User"],
+          "summary": "Check authentication status",
+          "description": "Verify current user session via access token cookie",
+          "security": [
+            { "cookieAuth": [] }
+          ],
+          "responses": {
+            "200": { "description": "Authenticated user info returned" },
+            "401": { "description": "Token revoked/expired/missing" }
           }
         }
       },

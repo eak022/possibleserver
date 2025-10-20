@@ -38,11 +38,13 @@ class TokenService {
       const decoded = jwt.decode(token);
       const expiresAt = new Date(decoded.exp * 1000);
       
-      await BlacklistedTokenModel.create({
-        token,
-        userId,
-        expiresAt
-      });
+      const resolvedUserId = userId || decoded?.id || decoded?.userId;
+      // ใช้ upsert เพื่อหลีกเลี่ยง unique conflict และอัปเดต expiresAt ครั้งล่าสุด
+      await BlacklistedTokenModel.updateOne(
+        { token },
+        { $set: { token, userId: resolvedUserId, expiresAt } },
+        { upsert: true }
+      );
       
       return true;
     } catch (error) {
