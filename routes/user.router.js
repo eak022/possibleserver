@@ -15,7 +15,7 @@ const authenticateToken = require("../middlewares/authJwt.middleware");
 const { uploadUserImage } = require("../middlewares/upload");
 
 //http://localhost:5000/api/v1/auth/
-router.post("/register", register);
+//router.post("/register", register);
 router.post("/login", login);
 router.post("/logout", authenticateToken, logout);
 router.post("/refresh-token", refreshToken);
